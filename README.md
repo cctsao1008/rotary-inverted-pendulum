@@ -10,6 +10,17 @@ The current reference hardware is a legacy STM32F103-based commercial rotary inv
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
+## ✨ Why is this interesting?
+
+A rotary inverted pendulum is a compact but demanding control problem because it combines several engineering challenges in one physical system:
+
+- **Underactuated nonlinear dynamics** — only the rotary arm is actuated, while the pendulum must be controlled indirectly through coupled motion.
+- **Hybrid control behavior** — swing-up and upright stabilization are fundamentally different regimes and require explicit transition logic.
+- **Real plant uncertainty** — friction, gearbox backlash, motor dead zone, sensing noise, delay, and actuator saturation materially affect controller performance.
+- **Model-to-hardware validation** — a controller that works in simulation is not sufficient; the plant model, estimator, controller, and safety boundaries must all survive real measurements.
+- **Embedded real-time constraints** — sensing, estimation, control, telemetry, local UI, watchdogs, and actuator safety must coexist within a deterministic runtime.
+- **Reproducible commissioning** — the project emphasizes measured evidence, system identification, and staged validation rather than tuning until the pendulum happens to balance.
+
 ## 🧭 Engineering and commissioning pipeline
 
 The development sequence is intentionally evidence-driven:
