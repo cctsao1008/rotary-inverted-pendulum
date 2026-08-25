@@ -1,4 +1,4 @@
-# Rotary Inverted Pendulum
+# 🌀 Rotary Inverted Pendulum
 
 Re-engineered embedded firmware and control software for a **rotary inverted pendulum control platform**, with emphasis on measurable state estimation, hybrid control, explicit actuator authority, and progressive commissioning.
 
@@ -10,7 +10,7 @@ The current reference hardware is a legacy STM32F103-based commercial rotary inv
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
-## Engineering and commissioning pipeline
+## 🧭 Engineering and commissioning pipeline
 
 The development sequence is intentionally evidence-driven:
 
@@ -52,7 +52,7 @@ Raw measurements, fitted parameters, model revisions, and real-versus-model vali
 
 Commissioning gates and their acceptance evidence are tracked in [Issue #48 — hardware-to-hybrid-control validation gates](https://github.com/cctsao1008/rotary-inverted-pendulum/issues/48).
 
-## Design principles
+## 🧠 Design principles
 
 1. **Measurement before control**  
    Hardware mappings, polarity, calibration, timing, dead zones, and plant response are established independently before closed-loop control is allowed to depend on them.
@@ -75,7 +75,7 @@ Commissioning gates and their acceptance evidence are tracked in [Issue #48 — 
 7. **Safety is part of the control architecture**  
    Admission, watchdog behavior, motor ownership, output qualification, and safe loss of authority are architectural concerns rather than afterthoughts around the controller.
 
-## System architecture
+## 🏗️ System architecture
 
 The system separates three questions that are often conflated in small embedded-control projects:
 
@@ -92,7 +92,7 @@ AUTHORITY & SAFETY
 "May that command physically reach the motor?"
 ```
 
-### State-estimation plane
+### 👁️ State-estimation plane
 
 ```text
 Physical Sensors
@@ -105,7 +105,7 @@ Physical Sensors
 
 The estimator boundary supports interchangeable estimation strategies while keeping sensor acquisition, validation, and controller logic separated.
 
-### Control plane
+### 🎛️ Control plane
 
 The rotary inverted pendulum is treated as a **mode-dependent / hybrid control problem**, not as one controller expected to work over the entire state space.
 
@@ -121,7 +121,7 @@ Controller availability and controller commissioning are intentionally separate 
 
 Controllers operate behind a common state, safety, and actuator interface. A control mode can select a policy and compute an actuator request without gaining direct access to the motor.
 
-### Authority and actuation plane
+### 🔐 Authority and actuation plane
 
 ```text
 Operator Intent
@@ -138,7 +138,7 @@ The **Control State Machine** owns controller-selection and mode-transition auth
 
 Motor authority is treated as an explicitly owned resource with `NONE / MAINTENANCE / CONTROL / FAULT` semantics.
 
-### Safe-state contract
+### 🛟 Safe-state contract
 
 Loss of valid control authority must converge toward a defined motor-safe condition rather than preserving the previous actuator command.
 
@@ -148,7 +148,7 @@ The exact coast / brake / standby behavior belongs to the actuator and hardware 
 
 See [Control Architecture](docs/architecture/control_architecture.md).
 
-## Physical platform
+## ⚙️ Physical platform
 
 Only hardware properties that directly shape the control architecture are summarized here:
 
@@ -162,7 +162,7 @@ Only hardware properties that directly shape the control architecture are summar
 
 The current reference implementation uses the original commercial hardware as a direct-fit development platform. Pin-level wiring, board-specific interfaces, electrical notes, and validation details are kept in [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
 
-## Communication and ROS 2 integration
+## 🔌 Communication and ROS 2 integration
 
 Communication remains outside the control core.
 
@@ -181,7 +181,7 @@ Transport and middleware must remain outside controller logic and must not impli
 
 See [Communication and Parameter Architecture](docs/architecture/communications.md).
 
-## Documentation
+## 📚 Documentation
 
 - [Control Architecture](docs/architecture/control_architecture.md)
 - [Telemetry Schema](docs/architecture/telemetry_schema.md)
