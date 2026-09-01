@@ -30,7 +30,7 @@ jobs:
       - name: Configure host tests
         run: |
           cmake -S . -B build/host -G Ninja \
-            -DBUILD_STM32_FIRMWARE=OFF \
+            -DRIP_TARGET=none \
             -DBUILD_HOST_TESTS=ON
 
       - name: Build host tests
@@ -63,7 +63,7 @@ jobs:
         run: |
           cmake -S . -B build/stm32f103 -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm-none-eabi.cmake \
-            -DBUILD_STM32_FIRMWARE=ON \
+            -DRIP_TARGET=stm32f103 \
             -DBUILD_HOST_TESTS=OFF
 
       - name: Build STM32F103 firmware
