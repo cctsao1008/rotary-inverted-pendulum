@@ -15,6 +15,17 @@ For an existing clone:
 git submodule update --init --recursive
 ```
 
+## Target selection
+
+Firmware target selection is explicit through `RIP_TARGET`.
+
+Currently buildable values are:
+
+- `stm32f103` — current validated STM32F103 firmware target
+- `none` — do not build target firmware; used by host-side tests
+
+The RP2350 platform directory is intentionally present before firmware enablement so its API and board mapping can be developed without presenting unvalidated hardware support as buildable.
+
 ## Host tests
 
 Requirements:
@@ -25,7 +36,7 @@ Requirements:
 
 ```bash
 cmake -S . -B build/host -G Ninja \
-  -DBUILD_STM32_FIRMWARE=OFF \
+  -DRIP_TARGET=none \
   -DBUILD_HOST_TESTS=ON
 
 cmake --build build/host
@@ -42,7 +53,7 @@ Additional requirements:
 ```bash
 cmake -S . -B build/stm32f103 -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm-none-eabi.cmake \
-  -DBUILD_STM32_FIRMWARE=ON \
+  -DRIP_TARGET=stm32f103 \
   -DBUILD_HOST_TESTS=OFF
 
 cmake --build build/stm32f103

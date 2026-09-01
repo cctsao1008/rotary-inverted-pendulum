@@ -47,21 +47,6 @@ add_custom_target(libopencm3_stm32f1_build
 )
 
 add_executable(${TARGET_NAME}
-    ${PROJECT_SOURCE_DIR}/app/closed_loop_enable_gate.c
-    ${PROJECT_SOURCE_DIR}/app/closed_loop_gate_runtime.c
-    ${PROJECT_SOURCE_DIR}/app/closed_loop_mode_manager.c
-    ${PROJECT_SOURCE_DIR}/app/command_service.c
-    ${PROJECT_SOURCE_DIR}/app/control_profile.c
-    ${PROJECT_SOURCE_DIR}/app/control_sensor_adapter.c
-    ${PROJECT_SOURCE_DIR}/app/key_service.c
-    ${PROJECT_SOURCE_DIR}/app/local_ui.c
-    ${PROJECT_SOURCE_DIR}/app/main.c
-    ${PROJECT_SOURCE_DIR}/app/motion_observer.c
-    ${PROJECT_SOURCE_DIR}/app/motor_authority.c
-    ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
-    ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
-    ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
-    ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
     ${PROJECT_SOURCE_DIR}/drivers/ssd1315/ssd1315.c
     ${PLATFORM_DIR}/board/board_adc.c
     ${PLATFORM_DIR}/board/board_button.c
@@ -81,8 +66,8 @@ add_dependencies(
 )
 
 target_include_directories(${TARGET_NAME} PRIVATE
-    ${PROJECT_SOURCE_DIR}/app
     ${GENERATED_DIR}
+    ${PROJECT_SOURCE_DIR}/platform/api
     ${PROJECT_SOURCE_DIR}/drivers/ssd1315
     ${PLATFORM_DIR}/board
     ${LIBOPENCM3_DIR}/include
@@ -119,7 +104,7 @@ target_link_options(${TARGET_NAME} PRIVATE
 )
 
 target_link_libraries(${TARGET_NAME} PRIVATE
-    control_core
+    rip_app
     ${LIBOPENCM3_LIBRARY}
 )
 

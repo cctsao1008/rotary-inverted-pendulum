@@ -10,18 +10,25 @@ set(FW_VERSION "0.1.0-dev"
     CACHE STRING
     "Firmware semantic version")
 
-option(BUILD_STM32_FIRMWARE
-       "Build STM32F103 firmware"
-       ON)
+set(RIP_TARGET "stm32f103"
+    CACHE STRING
+    "Firmware target; supported values: stm32f103, none")
+set_property(CACHE RIP_TARGET PROPERTY STRINGS stm32f103 none)
 
 option(BUILD_HOST_TESTS
        "Build host-side unit tests"
        OFF)
 
 add_subdirectory(control)
+add_subdirectory(app)
 
-if(BUILD_STM32_FIRMWARE)
+if(RIP_TARGET STREQUAL "stm32f103")
     add_subdirectory(platform/stm32f103)
+elseif(RIP_TARGET STREQUAL "none")
+    message(STATUS "Firmware target disabled (RIP_TARGET=none)")
+else()
+    message(FATAL_ERROR
+        "Unsupported RIP_TARGET='${RIP_TARGET}'. Supported values: stm32f103, none")
 endif()
 
 if(BUILD_HOST_TESTS)
