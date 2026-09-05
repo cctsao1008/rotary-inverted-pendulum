@@ -1,6 +1,6 @@
-# Experiment Workflow
+# Validation Workflow
 
-Every hardware experiment should be reproducible and traceable to source and binary identity.
+Every hardware validation run should be reproducible and traceable to source, binary identity, hardware condition, runtime configuration, and measured evidence.
 
 ## Standard flow
 
@@ -14,7 +14,7 @@ ChatGPT inspects latest GitHub main
   -> flash validated artifact when runtime code changed
   -> Windows serial_tool scenario / UART capture
   -> runtime log
-  -> experiment record
+  -> validation record
   -> PASS / FAIL / INCONCLUSIVE
 ```
 
@@ -58,7 +58,7 @@ Record:
 
 ## Acceptance criteria
 
-A test should not be marked PASS merely because it did not crash. Define measurable criteria where practical, for example:
+A validation run should not be marked PASS merely because it did not crash. Define measurable criteria where practical, for example:
 
 - loop average/max execution time;
 - stale-sample threshold;
@@ -67,7 +67,7 @@ A test should not be marked PASS merely because it did not crash. Define measura
 - actuator magnitude and rate limits;
 - capture/recovery envelope.
 
-## Current baseline
+## Historical baseline
 
 Validated pre-P1 baseline on 2026-08-15:
 

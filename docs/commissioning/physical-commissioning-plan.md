@@ -13,8 +13,8 @@ Physical closed-loop commissioning is intentionally blocked until the admission/
 - calibrated entry/sample limits;
 - actuator magnitude limiter;
 - actuator slew-rate limiter;
-- emergency stop path validated;
-- experiment logging ready.
+- emergency-stop path validated;
+- validation logging ready.
 
 ## First physical runs
 
@@ -27,4 +27,4 @@ Use:
 - manual emergency-stop access;
 - complete telemetry capture.
 
-Increase authority only after the previous level has repeatable evidence.
+Increase actuator authority only after the previous level has repeatable evidence. A successful motion or balance result does not bypass the next commissioning boundary.

@@ -1,27 +1,56 @@
 # 🌀 Rotary Inverted Pendulum
 
-Re-engineered embedded firmware and control software for a **rotary inverted pendulum control platform**, with emphasis on measurable state estimation, hybrid control, explicit actuator authority, and progressive commissioning.
+> **A ground-up re-architecture of a rotary inverted pendulum control system, from physical I/O to hybrid control.**
+
+This project takes an existing rotary inverted pendulum plant and rebuilds the control system around explicit engineering boundaries: hardware access, sensing, actuation, estimation, control, mode management, telemetry, validation, and actuator authority.
+
+The objective is **not** to reproduce the original vendor firmware and it is **not** organized around demonstrating a particular control algorithm. The plant is the physical starting point; the control architecture is the project.
 
 > **A known-working plant is not the same thing as a known control system.**
 
-The project rebuilds an existing working plant into a measurable, testable, safety-gated, and progressively commissionable embedded control platform.
+The reference hardware is a legacy STM32F103-based commercial rotary inverted pendulum. Its original board, motor, encoder, angular sensor, and electrical interfaces are retained as hardware provenance and as a commissioning target, while the firmware architecture is rebuilt independently.
 
-The reference hardware is a legacy STM32F103-based commercial rotary inverted pendulum system. Hardware facts, sensor calibration, plant behavior, control computation, and physical actuator authority are treated as separate engineering properties.
+## 🧭 Project scope
 
-Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
+The re-architecture separates concerns that were previously coupled in a monolithic embedded implementation:
 
-## ✨ Why is this interesting?
+```text
+Physical Plant
+    ↓
+Platform / Hardware Contract
+    ↓
+Sensing & Actuation
+    ↓
+State Estimation
+    ↓
+Control Policy
+    ↓
+Mode / Transition Management
+    ↓
+Authority & Safety
+    ↓
+Physical Motor Output
+```
 
-A rotary inverted pendulum combines several control problems in one compact physical system:
+The important architectural rule is that **computing a control command is not the same as having authority to actuate the motor**.
 
-- **Underactuated nonlinear dynamics** — only the rotary arm is actuated, while the pendulum is controlled indirectly through coupled motion.
-- **Hybrid control behavior** — swing-up and upright stabilization are fundamentally different regimes and require explicit transition logic.
-- **Real plant uncertainty** — friction, gearbox backlash, motor dead zone, sensing noise, delay, and actuator saturation materially affect controller performance.
-- **Model-to-hardware validation** — the plant model, estimator, controller, and safety boundaries must survive real measurements.
-- **Embedded real-time constraints** — sensing, estimation, control, telemetry, local UI, watchdogs, and actuator safety share one deterministic runtime.
-- **Reproducible commissioning** — measured evidence and staged commissioning replace informal tuning as the primary development method.
+Controller implementations such as pole placement, LQR, LQI, or energy-based swing-up are interchangeable policies behind the control interfaces. They are not the organizing principle of the repository.
 
-## 🧭 Engineering and commissioning pipeline
+## 🏗️ Engineering structure
+
+The project is developed along seven connected engineering concerns:
+
+1. **Architecture** — define subsystem boundaries, state ownership, authority, timing, and contracts.
+2. **Commissioning** — prove hardware, I/O, timing, safety paths, and runtime behavior progressively.
+3. **Characterization** — measure sensor, actuator, friction, dead zone, delay, and free-response behavior.
+4. **Modeling** — identify control-relevant plant dynamics from measured data and validate model limits.
+5. **Estimation** — convert raw measurements into validated plant state with explicit freshness and validity.
+6. **Control** — implement local stabilization, swing-up, capture/transition, and controller dispatch behind common interfaces.
+7. **Validation** — compare expected and measured behavior and retain reproducible evidence.
+
+These are engineering boundaries, not isolated phases. Evidence from later stages may force earlier assumptions or interfaces to be revised.
+
+## 🧪 Progressive commissioning pipeline
 
 ```text
 Hardware / I/O / Timing Baseline
@@ -32,99 +61,82 @@ Motor / Actuator Characterization
         ↓
 Pendulum Free-Response Characterization
         ↓
-System Identification & Model Validation
+Plant Identification & Model Validation
         ↓
-State Estimation & Controller Baselines
+State Estimation
         ↓
 Upright Stabilization
         ↓
 Energy-Based Swing-Up
         ↓
-Capture / Transition / End-to-End Validation
+Capture / Transition
+        ↓
+End-to-End Validation
 ```
 
-This is a commissioning order rather than the final runtime mode order. Upright stabilization is established first from a manually positioned or otherwise safely captured state so that the stabilization basin, feedback signs, actuator limits, and safety path are known before swing-up hands control over to it.
+This is a **commissioning order**, not the runtime mode order. Upright stabilization is established first from a manually positioned or otherwise safely captured state so that feedback signs, stabilization region, actuator limits, and the authority path are understood before swing-up is allowed to hand control over to it.
 
-The hybrid runtime is:
+The intended hybrid runtime is:
 
 ```text
 Hanging / Low-Energy State
         ↓
-Energy-Based Swing-Up
+Swing-Up
         ↓
 Capture / Transition
         ↓
 Upright Stabilization
 ```
 
-Raw measurements, fitted parameters, model revisions, and real-versus-model comparison are retained as engineering evidence.
+See [Commissioning Philosophy](docs/commissioning/commissioning-philosophy.md).
 
 ## 🧠 Design principles
 
 1. **Measurement before control**  
-   Hardware mappings, polarity, calibration, timing, dead zones, and plant response are established independently before closed-loop control depends on them.
+   Hardware mappings, polarity, calibration, timing, dead zones, and plant response are established before closed-loop control depends on them.
 
 2. **Control computation is not actuator authority**  
-   A valid controller output does not automatically grant permission to drive the physical motor.
+   A controller may produce a valid request without being permitted to drive the motor.
 
 3. **Fail closed**  
    Missing, stale, invalid, unqualified, or faulted state reduces actuator authority rather than preserving the last command.
 
-4. **Progressive commissioning**  
-   The control stack proceeds from passive observation to bounded maintenance actuation, characterization, observe-only control, admission, authority, and physical closed-loop control.
+4. **Progressive authority**  
+   Bring-up proceeds from passive observation to bounded maintenance actuation, characterization, observe-only control, admission, explicit authority, and finally physical closed-loop operation.
 
-5. **Control logic remains platform-independent where practical**  
-   Estimation, safety, configuration, and controller logic remain separate from MCU-specific I/O.
+5. **Platform independence where practical**  
+   Estimation, control, safety, configuration, and state-machine logic remain independent of MCU-specific I/O.
 
 6. **Unknown is an acceptable engineering state; assumption is not evidence**  
    Historical behavior, source-file existence, or plausible inference is not promoted into a current engineering fact without supporting evidence.
 
-7. **Safety is part of the control architecture**  
-   Admission, watchdog behavior, motor ownership, output qualification, and safe loss of authority are architectural concerns.
+7. **Safety is architectural**  
+   Admission, watchdog behavior, output qualification, motor ownership, and safe loss of authority are part of the control system design.
 
-## 🏗️ System architecture
-
-The system separates three questions:
-
-```text
-STATE ESTIMATION
-"What is the plant doing?"
-        |
-        v
-CONTROL REGIME / COMPUTATION
-"What control strategy applies, and what command should it produce?"
-        |
-        v
-AUTHORITY & SAFETY
-"May that command physically reach the motor?"
-```
+## 🧩 Architecture planes
 
 ### 👁️ State-estimation plane
 
 ```text
 Physical Sensors
-    -> Signal Acquisition
+    -> Acquisition
     -> Calibration / Wrapping
     -> Filtering / Estimation
-    -> State Validity / Safety
-    -> validated plant state
+    -> State Validity / Freshness
+    -> Validated Plant State
 ```
 
-The estimator boundary supports interchangeable estimation strategies while keeping sensor acquisition, validation, and controller logic separated.
+Sensor acquisition and estimator logic are intentionally separated so estimator implementations can change without rewriting board I/O.
 
 ### 🎛️ Control plane
 
-The rotary inverted pendulum is treated as a **mode-dependent / hybrid control problem**.
+The rotary inverted pendulum is treated as a **hybrid control system** with explicit mode and transition ownership.
 
 ![Hybrid control mode transitions](docs/architecture/control-mode-transitions.png)
 
-The control state machine separates the large-angle swing-up problem from local upright stabilization. **SWING-UP** uses energy-based control to drive the pendulum toward the upright equilibrium. **TRANSITION** manages controller handover after the state enters the stabilization region. **STABILIZATION** applies a local stabilizing controller such as PD/PID, pole placement, LQR, or integral-augmented LQI.
+The control state machine selects the active policy and owns transitions between swing-up, capture/transition, and upright stabilization. A selected controller computes an actuator request; it does not directly own the motor.
 
-The local controller baselines serve different engineering roles: PD/PID provides an intuitive commissioning baseline, pole placement provides a direct model-sanity check against the identified linearized plant, and LQR provides the primary state-feedback trade-off between regulation and control effort.
-
-Transitions are state-dependent and reversible. Leaving the stabilization region can return control to swing-up or transition depending on the measured state.
-
-Controllers operate behind a common state, safety, and actuator interface. A control mode can select a policy and compute an actuator request without gaining direct access to the motor.
+See [Controller Strategy](docs/control/controller-strategy.md) and [Control Architecture](docs/architecture/control_architecture.md).
 
 ### 🔐 Authority and actuation plane
 
@@ -136,63 +148,83 @@ Operator Intent
     -> Motor Authority Arbiter
     -> Watchdog / Safe-Shutdown Boundary
     -> board_motor
-    -> rotary-arm motor
+    -> Rotary-Arm Motor
 ```
 
-The **Control State Machine** owns controller-selection and mode-transition authority. The **Motor Authority Arbiter** owns physical actuator command authority.
+The **Control State Machine** owns controller selection and mode transitions. The **Motor Authority Arbiter** owns physical actuator command authority.
 
 Motor authority is represented with `NONE / MAINTENANCE / CONTROL / FAULT` semantics.
 
-### 🛟 Safe-state contract
+Loss of valid authority converges toward a defined motor-safe condition rather than preserving the previous command. Coast, brake, and standby behavior belong to the actuator/hardware contract rather than to individual controllers.
 
-Loss of valid control authority converges toward a defined motor-safe condition rather than preserving the previous actuator command.
+## ⚙️ Platform boundary
 
-Safe loss of authority may result from operator disable, invalid state, stale control output, runtime fault, authority conflict, watchdog expiration, or an independent emergency-stop path. Shutdown policy is enforced at the actuator-authority boundary so swing-up, transition logic, and stabilization controllers share the same safety semantics.
-
-The exact coast / brake / standby behavior belongs to the actuator and hardware contract rather than the controller itself.
-
-See [Control Architecture](docs/architecture/control_architecture.md).
-
-## ⚙️ Physical platform
-
-- **Reference controller:** STM32F103C8T6 at 72 MHz
-- **Plant:** single-link rotary inverted pendulum with an actuated horizontal rotary arm driven by a geared DC motor
-- **Pendulum sensing:** analog angular-position sensor
-- **Rotary-arm sensing:** quadrature encoder; legacy hardware documentation specifies **1040 counts per output-shaft revolution**
-- **Actuation:** TB6612FNG H-bridge driving the rotary-arm DC motor
-- **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox
-- **Firmware timing baseline:** 1 kHz scheduler / acquisition / control-pipeline tick
-
-The reference implementation uses the original commercial hardware as a direct-fit development platform. Pin-level wiring, board-specific interfaces, electrical notes, and validation details are kept in [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
-
-## 🔌 Communication and ROS 2 integration
-
-Communication remains outside the control core.
+The shared `platform/api/` contract separates application-visible hardware capabilities from MCU-specific implementations.
 
 ```text
-                 Control / Estimation Core
-                          |
-                 native application state
-                          |
-              +-----------+-----------+
-              |                       |
-              v                       v
-      Maintenance transport     ROS 2 / DDS integration
+platform/
+├── api/            Shared board contract
+├── stm32f103/      Current implementation
+└── rp2350/         Planned implementation boundary
 ```
 
-Transport and middleware remain outside controller logic and do not implicitly confer actuator authority.
+- **STM32F103** is the current reference implementation used to re-architect and commission the existing plant.
+- **RP2350** is a separate platform target behind the same hardware contract. Its directory represents an implementation boundary and plan; it does not imply completed hardware validation.
 
-See [Communication and Parameter Architecture](docs/architecture/communications.md).
+The legacy Forest D1 / Forest S1 names are used only where needed to identify original vendor hardware or documentation provenance. They do not define the software architecture.
 
-## 📚 Documentation
+See [Platform Layer](platform/README.md) and [Repository Layout](docs/development/repository-layout.md).
+
+## 🔩 Reference physical plant
+
+Current hardware baseline:
+
+- STM32F103C8T6 reference controller
+- geared 12 V DC rotary-arm motor
+- quadrature Hall encoder on the geared motor
+- conductive-plastic angular-position sensor for the pendulum
+- TB6612FNG H-bridge motor driver
+- original commercial mechanical plant
+
+Pin-level wiring, electrical notes, historical hardware details, and currently validated facts are kept separately in [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
+
+## 📂 Repository ownership
+
+```text
+app/                    System integration and application-level orchestration
+control/                Platform-independent estimation, control, safety, and state-machine logic
+drivers/                Reusable device drivers
+platform/api/           Shared hardware contract
+platform/stm32f103/     STM32F103 implementation
+platform/rp2350/        RP2350 implementation boundary
+tests/                  Host-side deterministic tests
+tools/                  Validation and runtime tooling
+docs/architecture/      Architecture and interface contracts
+docs/commissioning/     Bring-up and progressive authority procedures
+docs/modeling/          Plant characterization, identification, and model work
+docs/control/           Controller strategy and control-specific engineering notes
+docs/validation/        Reproducible evidence, replay, and validation records
+docs/hardware/          Hardware provenance and physical baselines
+```
+
+The dependency rule is simple: **control logic must not know which MCU is underneath it.**
+
+## 📚 Key documentation
 
 - [Control Architecture](docs/architecture/control_architecture.md)
+- [Control Contracts](docs/architecture/control_contracts.md)
+- [System State Model](docs/architecture/system_state_model.md)
 - [Telemetry Schema](docs/architecture/telemetry_schema.md)
 - [Communication and Parameter Architecture](docs/architecture/communications.md)
-- [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md)
 - [Commissioning Philosophy](docs/commissioning/commissioning-philosophy.md)
 - [Firmware Commissioning](docs/commissioning/firmware-commissioning.md)
+- [Physical Commissioning Plan](docs/commissioning/physical-commissioning-plan.md)
 - [Motor Commissioning and Characterization](docs/commissioning/motor-characterization.md)
+- [Plant Characterization and Identification](docs/modeling/plant-identification.md)
+- [Controller Strategy](docs/control/controller-strategy.md)
+- [Validation Workflow](docs/validation/validation-workflow.md)
+- [Record and Replay](docs/validation/record-replay.md)
+- [Validation and Evidence Model](docs/validation/evidence-model.md)
 - [Repository Layout](docs/development/repository-layout.md)
 - [Build and Test](docs/development/build-and-test.md)
-- [Validation and Evidence Model](docs/validation/evidence-model.md)
+- [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md)
