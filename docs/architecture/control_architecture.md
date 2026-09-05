@@ -2,8 +2,6 @@
 
 ## Control-computation path
 
-The current platform-independent control path is:
-
 ```text
 Physical Sensors
     ↓
@@ -28,7 +26,7 @@ This path computes an actuator command. It does not implicitly own the physical 
 
 ## Physical actuation boundary
 
-Automatic control currently has no physical motor sink:
+Automatic control has no physical motor sink:
 
 ```text
 control_pipeline
@@ -36,7 +34,7 @@ control_pipeline
     -> automatic motor sink = UNBOUND
 ```
 
-The current physical actuation path is maintenance-only:
+The physical actuation path is maintenance-only:
 
 ```text
 UART / maintenance command
@@ -56,7 +54,7 @@ The Motor Authority Arbiter is the physical ownership boundary. Controllers do n
 
 ## Ownership
 
-| Component | Current responsibility |
+| Component | Responsibility |
 |---|---|
 | `sensor_acquisition` | Raw measurements and timestamps |
 | `state_estimator` | Control-domain state generation |
@@ -68,32 +66,28 @@ The Motor Authority Arbiter is the physical ownership boundary. Controllers do n
 | `motor_authority` | Exclusive physical motor ownership |
 | `board_motor` | MCU/H-bridge hardware implementation |
 
-## Current capability status
+## Implemented control path
 
-| Capability | State |
-|---|---|
-| Basic estimator | Implemented / runtime-selectable |
-| LQR balance path | Implemented / runtime-selectable |
-| LQI | Stub; returns safe zero; runtime-rejected |
-| Energy swing-up | Stub; returns safe zero; disabled and runtime-rejected |
-| Capture | Stub; returns safe zero; disabled and runtime-rejected |
-| Kalman estimator | Not runtime-selectable |
-| Automatic motor sink | Unbound |
-| Maintenance motor output | Implemented |
+- Basic state estimator
+- LQR balance-controller selection
+- State-safety evaluation
+- Control state machine
+- Actuator mapping
+- Output safety
+- Observe-only automatic-control profile
+- Bounded maintenance motor output
 
 ## State coordinates
 
-The control state uses:
-
 - `theta`: pendulum angle; circular and wrapped for shortest-path angle differences.
 - `theta_dot`: pendulum angular rate.
-- `phi`: continuous accumulated rotary-arm angle relative to the current reference.
+- `phi`: continuous accumulated rotary-arm angle relative to the active reference.
 - `phi_dot`: rotary-arm angular rate.
 
-The current STM32 runtime uses firmware startup as the temporary `phi = 0` reference.
+The STM32 runtime uses firmware startup as the `phi = 0` reference.
 
 ## Safety and authority
 
 State validity and physical authority are independent decisions. Invalid, stale, non-finite, unready, or faulted state denies control. Physical motor ownership is independently arbitrated by `motor_authority`.
 
-The current observe-only automatic-control profile keeps `motor_output_enabled = false` and the automatic motor sink unbound.
+The observe-only automatic-control profile keeps `motor_output_enabled = false` and the automatic motor sink unbound.

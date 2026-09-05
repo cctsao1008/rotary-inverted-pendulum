@@ -6,7 +6,7 @@
 
 `phi` is the continuous accumulated rotary-arm position relative to the active reference and is not wrapped at `+/-pi`. The STM32 sensor adapter extends encoder rollover before conversion to the control coordinate.
 
-The current runtime uses firmware startup as the temporary `phi = 0` reference.
+The runtime uses firmware startup as the `phi = 0` reference.
 
 ## Timing
 
@@ -16,24 +16,22 @@ A long forward timing gap re-seeds position history and clears rate readiness. D
 
 ## Configuration ownership
 
-- Per-unit pendulum calibration is owned by `app/runtime_parameters`.
+- Per-unit pendulum parameters are owned by `app/runtime_parameters`.
 - Runtime control profile values are owned by `app/control_profile`.
-- Estimator, controller, state-safety, and runtime structs remain the platform-independent schema boundary.
+- Estimator, controller, state-safety, and runtime structs form the platform-independent schema boundary.
 
-## Runtime capability contract
+## Runtime selection
 
-The runtime configuration currently accepts:
+The runtime configuration accepts:
 
 - `STATE_ESTIMATOR_BASIC`
 - `BALANCE_CONTROLLER_LQR`
 - `swing_up_enabled = false`
 - `capture_enabled = false`
 
-LQI, swing-up, capture, and non-basic estimator selections are not supported runtime configurations.
-
 ## Observe-only state-safety contract
 
-The current application profile sets:
+The application profile sets:
 
 - `state_safety.configured = true`
 - `max_sample_age_us = 0` in state safety
@@ -42,11 +40,9 @@ The current application profile sets:
 - `motor_output_enabled = false`
 - automatic-control motor sink = unbound
 
-This is a structurally valid diagnostic profile, not a calibrated physical closed-loop safety envelope.
+The profile is diagnostic and cannot actuate the motor through the automatic-control path.
 
 ## Safety ownership
-
-The automatic-control safety chain is:
 
 ```text
 state_safety
@@ -58,4 +54,4 @@ state_safety
 
 Physical actuation is a separate authority chain through `motor_authority` and `board_motor`.
 
-The maintenance motor path is currently the only path that reaches the physical motor.
+The maintenance motor path is the path that reaches the physical motor.

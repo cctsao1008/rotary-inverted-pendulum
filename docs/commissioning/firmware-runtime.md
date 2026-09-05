@@ -1,19 +1,19 @@
-# Current Firmware State
+# Firmware Runtime
 
 ## Automatic control
 
 The automatic-control runtime is observe-only:
 
-- real sensor acquisition is connected to the control pipeline;
-- basic estimation is implemented;
-- LQR is the accepted balance-controller selection;
+- sensor acquisition is connected to the control pipeline;
+- basic estimation is active;
+- LQR is the balance-controller selection;
 - state-safety evaluation is active;
 - `motor_output_enabled = false`;
 - the automatic physical motor sink is unbound.
 
 ## Physical motor path
 
-Physical actuation is currently available only through the maintenance service and Motor Authority Arbiter.
+Physical actuation is provided through the maintenance service and Motor Authority Arbiter.
 
 Implemented maintenance commands include:
 
@@ -45,4 +45,4 @@ Completion/stop paths force PWM to zero and return the maintenance interface to 
 
 ## Voltage telemetry
 
-`vbus_mV` uses the nominal 3.300 V VDDA assumption and the schematic 10 kΩ / 1 kΩ divider ratio. It is diagnostic telemetry; actual scale/offset calibration is not established as a protection-grade measurement.
+`vbus_mV` is computed from a nominal 3.300 V VDDA and the 10 kΩ / 1 kΩ divider ratio.

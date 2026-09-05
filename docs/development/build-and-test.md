@@ -1,13 +1,11 @@
 # Build and Test
 
-## Buildable targets
+## Build modes
 
-`RIP_TARGET` currently accepts these build modes:
+`RIP_TARGET` accepts:
 
-- `stm32f103` — current embedded firmware target
+- `stm32f103` — embedded firmware target
 - `none` — host-test build without target firmware
-
-RP2350 is not a buildable target.
 
 ## Host tests
 
@@ -33,7 +31,7 @@ cmake -S . -B build/stm32f103 -G Ninja \
 cmake --build build/stm32f103
 ```
 
-Current target artifacts are:
+Artifacts:
 
 ```text
 build/stm32f103/rotary-inverted-pendulum.elf

@@ -1,10 +1,10 @@
 # Observe-only State Safety Profile
 
-The current default application control profile is diagnostic and structurally configured.
+The default application control profile is diagnostic and structurally configured.
 
-## Current values
+## Values
 
-| Field | Current value |
+| Field | Value |
 |---|---:|
 | `configured` | `true` |
 | `max_sample_age_us` | `0` |
@@ -15,6 +15,6 @@ The current default application control profile is diagnostic and structurally c
 | `motor_output_enabled` | `false` |
 | automatic motor sink | unbound |
 
-The profile preserves argument, sensor-validity, estimator-readiness, finite-state, and timestamp-consistency checks while making no claim that physical plant bounds are calibrated.
+Argument, sensor-validity, estimator-readiness, finite-state, and timestamp-consistency checks remain active. Physical angle/rate limits are non-restrictive in this profile.
 
-It is not an active closed-loop physical safety envelope.
+With `motor_output_enabled = false` and the automatic sink unbound, the profile cannot actuate the motor through the automatic-control path.
