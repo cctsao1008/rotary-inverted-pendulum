@@ -1,0 +1,33 @@
+name: Engineering validation
+description: Validate an engineering claim and capture its final conclusion
+title: "[VALIDATION] "
+body:
+  - type: textarea
+    id: claim
+    attributes:
+      label: Claim
+      description: State the engineering claim being validated.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Measured result
+    validations:
+      required: true
+  - type: dropdown
+    id: conclusion
+    attributes:
+      label: Conclusion
+      options:
+        - PASS
+        - FAIL
+        - INCONCLUSIVE
+    validations:
+      required: true

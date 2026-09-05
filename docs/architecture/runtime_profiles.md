@@ -1,44 +1,20 @@
 # Runtime Profiles
 
-Runtime profiles prevent ad-hoc combinations of safety-critical settings during bring-up.
+## Implemented profile
 
-## Target profiles
+### `observe_only`
 
-### observe_only
+The current application profile has:
 
-- motor output disabled;
-- telemetry enabled;
-- admission logic may be evaluated for instrumentation;
-- no closed-loop motor sink binding.
+- automatic motor output disabled;
+- automatic motor sink unbound;
+- telemetry available;
+- basic estimator configuration active;
+- state-safety configuration structurally valid;
+- physical angle/rate state-safety bounds intentionally non-restrictive.
 
-### bench_safe
+## Not implemented
 
-- motor output allowed only after all safety contracts are validated;
-- strict output magnitude limit;
-- strict output slew-rate limit;
-- restrained mechanical setup required.
+The repository does not currently provide authoritative `bench_safe`, `commissioning`, or `normal` active-control profiles.
 
-### commissioning
-
-- explicit operator arm/enable sequence;
-- calibrated admission limits;
-- bounded actuator authority;
-- full telemetry and experiment logging.
-
-### normal
-
-- only introduced after repeatable physical validation;
-- no safety relaxation relative to commissioning unless justified by evidence.
-
-## Parameter provenance
-
-Every safety-related profile value must record:
-
-- value;
-- unit;
-- source or experiment ID;
-- rationale;
-- validation date;
-- applicable hardware revision.
-
-The current 2000 us sample-age and 250 mrad entry-angle values are provisional observe-only values and must not be promoted into active profiles without calibration evidence.
+No Markdown value for an unimplemented profile is an active safety limit.

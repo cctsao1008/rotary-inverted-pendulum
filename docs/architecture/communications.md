@@ -1,104 +1,29 @@
 # Communication and Parameter Architecture
 
-## Decision
+## Current transport
 
-The firmware uses two communication roles:
+Text UART maintenance transport is implemented. The control and sensor core remain independent of transport-specific types.
 
-1. **Text maintenance mode** for bring-up, recovery, manual commands,
-   low-rate telemetry, and runtime parameter changes.
-2. **Micro XRCE-DDS operational mode** as a future feasibility milestone for
-   structured high-rate telemetry and ROS 2 / DDS integration.
+Micro XRCE-DDS is **not implemented**. COBS transport is **not implemented**.
 
-COBS is not implemented. XRCE-DDS serial transport already provides its own
-framing, reliability mechanisms, and Agent integration. Maintaining a second
-custom binary protocol would duplicate code, host tooling, and validation on
-the resource-constrained STM32F103C8T6.
+## Current maintenance behavior
 
-The control and sensor modules must remain independent of either transport.
-They expose native application state and parameter data; a transport backend
-adapts that data without introducing DDS types into the control core.
+The current firmware exposes text commands for status, telemetry, runtime parameters, and bounded maintenance motor control.
 
-## Current maintenance mode
+`param set` changes active RAM values. Persistent `param save` / `param load` storage is not implemented.
 
-The current firmware always boots with:
-
-- Motor B initialized stopped and disarmed;
-- text transport active;
-- telemetry disabled;
-- runtime parameters restored to compiled defaults.
-
-Supported commands:
-
-```text
-help
-status
-
-telem status
-telem on
-telem off
-telem rate <1..20>
-
-param list
-param get <name>
-param set <name> <value>
-param defaults
-
-transport status
-
-motor status
-motor arm
-motor test <signed_percent> <duration_ms>
-motor stop
-motor disarm
-```
-
-`param set` changes only the active RAM value. `param save` and `param load`
-deliberately return an error until versioned, CRC-protected Flash storage is
-implemented. Motor arm state and telemetry enable state must never be saved.
-
-The text-mode motor command is a local maintenance test, not an operational
-control transport. Arming expires after 5 s, every test is limited to 20% and
-2 s, and completion forces a stop and disarm. XRCE-DDS motor arm remains out of
-scope.
-
-The PA3 M button and text commands update the same telemetry state. The last
-valid operation wins. Text telemetry is capped at 20 Hz because the current
-USART1 transmit path is blocking and high-rate telemetry is not required for
-maintenance bring-up.
+The maintenance motor arm window is **30 seconds**. Ordinary `motor test` accepts signed duty magnitude from 1% through 20% and duration from 50 ms through 10000 ms. Stop/completion paths return the interface to stopped/disarmed state.
 
 ## Runtime parameters
 
-The initial registry contains:
+| Name | Current default | Range / meaning |
+|---|---:|---|
+| `sensor.pendulum.upright_adc` | `2928` | Provisional current upright ADC reference |
+| `sensor.pendulum.direction` | `1` | `-1` or `1`; angle sign convention |
+| `telem.rate_hz` | `10` | Text telemetry rate, 1..20 Hz |
 
-| Name | Default | Range | Meaning |
-|---|---:|---:|---|
-| `sensor.pendulum.upright_adc` | 2928 | 0..4095 | Provisional upright zero inferred from the measured natural-down point |
-| `sensor.pendulum.direction` | 1 | -1 or 1 | `1` means increasing ADC is positive angle |
-| `telem.rate_hz` | 10 | 1..20 | Text telemetry rate |
+The pendulum conversion wraps the raw ADC delta before scaling to the circular angle domain.
 
-The upright default is provisional and must remain tunable until it is checked
-against a mechanically referenced vertical-up position.
+## Physical authority
 
-The pendulum conversion first wraps the ADC delta to `[-2048, 2047]` and only
-then scales it to `[-pi, pi)`. Direct subtraction across `4095 <-> 0` is not
-valid.
-
-## XRCE-DDS feasibility gate
-
-XRCE-DDS is a roadmap item, not part of the current firmware image. A future
-isolated feasibility change must measure:
-
-- Flash and static / peak RAM use;
-- serial bandwidth at the intended publish rates;
-- control-loop jitter at 100 Hz and 500 Hz publication;
-- Agent disconnect and reconnect behavior;
-- best-effort state stream and reliable command buffer costs;
-- complete suppression of raw `printf` output while XRCE serial mode is active.
-
-The first XRCE-DDS scope should be telemetry and low-risk, disarmed-only
-parameter access. Remote motor arm is excluded from the first integration.
-
-If the STM32F103 resource or timing budget is insufficient, text maintenance
-mode remains available and XRCE-DDS moves to the planned RP2350 or a larger
-STM32 target. COBS should only be reconsidered if there is a demonstrated need
-for a lightweight Agent-free binary logger.
+The text motor commands are maintenance operations. They do not grant automatic closed-loop controller authority.

@@ -1,5 +1,5 @@
 # RP2350 Board Configurations
 
-Board-specific pin maps and electrical assumptions live here rather than in the generic RP2350 peripheral implementation.
+No RP2350 board-specific configuration is currently implemented or physically verified.
 
-The first planned configuration is an Arduino UNO-form-factor RP2350A board paired with a TB6612 motor/encoder shield. A concrete configuration header will be added only after physical continuity and voltage-domain validation.
+No pin map or electrical assumption in this directory is authoritative for a supported target.

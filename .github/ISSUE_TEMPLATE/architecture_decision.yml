@@ -1,0 +1,22 @@
+name: Architecture decision
+description: Define or change a current architecture decision
+title: "[ARCH] "
+body:
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision
+      description: State the resulting architecture decision.
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: System impact
+      description: Interfaces, dependencies, safety, timing, or platform impact.
