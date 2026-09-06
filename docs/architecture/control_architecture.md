@@ -1,93 +1,95 @@
 # Control Architecture
 
-## Control-computation path
+## Architectural boundaries
+
+The software uses three primary boundaries rather than a traditional N-tier call stack.
 
 ```text
-Physical Sensors
-    ↓
-Sensor Acquisition
-    ↓
-Basic State Estimator
-    ↓
-State Safety
-    ↓
-Control State Machine
-    ↓
-Controller Dispatch
-    ↓
-Actuator Mapper
-    ↓
-Output Safety
-    ↓
-Computed Actuator Command
+                    control
+                       ▲
+                       │
+                   supervisor
+                    ▲      ▲
+                    │      │
+                  plant    │
+                    ▲      │
+                    └──┬───┘
+                       │
+                    firmware
 ```
 
-This path computes an actuator command. It does not implicitly own the physical motor.
+Dependencies point toward the control core. Target-specific code must not define control-domain semantics.
 
-## Physical actuation boundary
+## Control Core
 
-Automatic control has no physical motor sink:
+`crates/control/` contains deterministic, target-independent control computation.
+
+It owns:
+
+- `ControlState` with state order `[theta, theta_dot, phi, phi_dot]`;
+- `BasicEstimator`;
+- control-state safety;
+- `ControlRegime` (`SwingUp`, `Capture`, `Balance`);
+- controller interfaces and LQR;
+- bounded normalized `ControlEffort`.
+
+The control core has no motor direction, PWM, GPIO, UART, interrupt, HAL, or MCU concepts.
 
 ```text
-control_pipeline
-    -> computed actuator command
-    -> automatic motor sink = UNBOUND
+EstimatorInput
+    ↓
+BasicEstimator
+    ↓
+ControlState
+    ↓
+Control Safety
+    ↓
+Controller
+    ↓
+ControlEffort
 ```
 
-The physical actuation path is maintenance-only:
+## Plant Components
+
+`crates/plant/` owns physical conventions that are reusable across MCU targets:
+
+- pendulum ADC-to-angle conversion;
+- encoder count-to-continuous-angle conversion;
+- motor sign convention;
+- normalized effort-to-drive mapping.
+
+The resulting `DriveCommand` contains physical actuator semantics. These semantics do not enter the control core.
+
+## System Supervisor
+
+`crates/supervisor/` owns operational policy and runtime composition above the pure control computation.
+
+It owns:
+
+- operational runtime state;
+- sensor observation ports;
+- observe-only control-cycle orchestration;
+- physical motor authority;
+- motor and telemetry ports.
+
+Ports are consumer-owned: the supervisor defines the capabilities it requires; firmware adapters implement those capabilities.
+
+## Target Adapters
+
+`firmware/<target>/` owns target-specific integration such as startup, interrupt wiring, clocks, ADC, encoder timers, PWM, UART, DMA, GPIO, and board composition.
+
+Target adapters may depend on `supervisor`, `plant`, and `control`. The reverse dependency is not allowed.
+
+## Execution planes
+
+The runtime separates deterministic control work from background observability work.
 
 ```text
-UART / maintenance command
-    ↓
-motor_test_service
-    ↓
-Motor Authority Arbiter (MAINTENANCE)
-    ↓
-board_motor
-    ↓
-TB6612
-    ↓
-Rotary-Arm Motor
+REAL-TIME CONTROL
+observation -> estimate -> safety -> control -> qualify -> authority -> motor
+
+BACKGROUND
+commands / telemetry / OLED / diagnostics
 ```
 
-The Motor Authority Arbiter is the physical ownership boundary. Controllers do not write PWM or direction GPIO directly.
-
-## Ownership
-
-| Component | Responsibility |
-|---|---|
-| `sensor_acquisition` | Raw measurements and timestamps |
-| `state_estimator` | Control-domain state generation |
-| `state_safety` | State validity and fail-closed control eligibility |
-| `control_state_machine` | Control mode and controller-selection ownership |
-| `controller_dispatch` | Dispatch to the implementation selected by mode |
-| `actuator_mapper` | Abstract control effort to actuator-domain command |
-| `output_safety` | Command-domain constraints and invalid-command rejection |
-| `motor_authority` | Exclusive physical motor ownership |
-| `board_motor` | MCU/H-bridge hardware implementation |
-
-## Implemented control path
-
-- Basic state estimator
-- LQR balance-controller selection
-- State-safety evaluation
-- Control state machine
-- Actuator mapping
-- Output safety
-- Observe-only automatic-control profile
-- Bounded maintenance motor output
-
-## State coordinates
-
-- `theta`: pendulum angle; circular and wrapped for shortest-path angle differences.
-- `theta_dot`: pendulum angular rate.
-- `phi`: continuous accumulated rotary-arm angle relative to the active reference.
-- `phi_dot`: rotary-arm angular rate.
-
-The STM32 runtime uses firmware startup as the `phi = 0` reference.
-
-## Safety and authority
-
-State validity and physical authority are independent decisions. Invalid, stale, non-finite, unready, or faulted state denies control. Physical motor ownership is independently arbitrated by `motor_authority`.
-
-The observe-only automatic-control profile keeps `motor_output_enabled = false` and the automatic motor sink unbound.
+Background work must be deferable and must not become a dependency of the control path.

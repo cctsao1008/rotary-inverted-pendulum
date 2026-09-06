@@ -1,49 +1,39 @@
 # Repository Layout
 
-The repository is organized around control-system boundaries rather than controller names or MCU-specific control logic.
-
-## Top-level ownership
+The active source tree is Rust-first.
 
 ```text
-app/                    Application integration and system orchestration
-cmake/                  Cross-compilation support
-control/                Platform-independent estimator, safety, mode, and controller logic
-drivers/                Reusable device drivers
-platform/api/           Shared application-to-platform hardware contract
-platform/stm32f103/     STM32F103 implementation
-platform/rp2350/        Reserved platform namespace
-tests/                  Host-side deterministic tests
-third_party/            External source dependencies
-tools/                  Runtime and analysis tooling
+Cargo.toml
+rust-toolchain.toml
+.cargo/
+
+crates/
+├── control/             Pure `no_std` control computation
+├── supervisor/          Runtime supervision, ports, and motor authority
+└── plant/               Plant conversions and drive conventions
+
+firmware/
+└── stm32f103/           STM32F103 composition root and linker memory definition
+
+docs/
+├── architecture/        Architecture and interface definitions
+├── hardware/            Hardware definition and provenance
+└── development/         Repository/build reference
 ```
 
-## Documentation ownership
-
-```text
-docs/architecture/      Architecture and interface contracts
-docs/commissioning/     Firmware and maintenance interfaces
-docs/control/           Controller implementation
-docs/hardware/          Hardware definition
-docs/development/       Repository/build reference
-```
-
-Markdown is specification/reference material. Validation evidence, open questions, history, roadmaps, dated status records, and checklists are kept outside Markdown.
+The previous C application, C control core, board API, libopencm3 platform implementation, CMake build, legacy drivers, and C host tests are not part of the active tree. Git history retains them.
 
 ## Dependency direction
 
 ```text
-                 control/
-                    ^
-                    |
-                   app/
-                    ^
-                    |
-              platform/api/
-                    ^
-                    |
-          +---------+---------+
-          |                   |
-platform/stm32f103/      platform/rp2350/
+control
+  ▲
+  │
+plant ◄── supervisor
+  ▲          ▲
+  └────┬─────┘
+       │
+    firmware
 ```
 
-`control/` remains MCU-independent. Platform implementations own SDK, peripheral, linker, startup, and target-specific plumbing.
+`control` is independent of target hardware and physical actuator representation. `plant` may depend on control-domain value types. `supervisor` composes control and plant semantics. Firmware implements target-specific ports and owns hardware integration.

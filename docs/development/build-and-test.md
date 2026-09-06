@@ -1,41 +1,33 @@
 # Build and Test
 
-## Build modes
+## Toolchain
 
-`RIP_TARGET` accepts:
-
-- `stm32f103` — embedded firmware target
-- `none` — host-test build without target firmware
+The repository uses the stable Rust toolchain. `rust-toolchain.toml` installs `rustfmt`, `clippy`, and the Cortex-M3 `thumbv7m-none-eabi` target.
 
 ## Host tests
 
-Requirements: CMake 3.16+, Ninja, and a C11 host compiler.
+```bash
+cargo test-host
+```
+
+This tests the target-independent `control`, `plant`, and `supervisor` crates on the host.
+
+Equivalent command:
 
 ```bash
-cmake -S . -B build/host -G Ninja \
-  -DRIP_TARGET=none \
-  -DBUILD_HOST_TESTS=ON
-cmake --build build/host
-ctest --test-dir build/host --output-on-failure
+cargo test --workspace --exclude rip-firmware-stm32f103
 ```
 
-## STM32F103 firmware
-
-Additional requirements: Arm GNU Toolchain and GNU Make for libopencm3.
+## STM32F103 target
 
 ```bash
-cmake -S . -B build/stm32f103 -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm-none-eabi.cmake \
-  -DRIP_TARGET=stm32f103 \
-  -DBUILD_HOST_TESTS=OFF
-cmake --build build/stm32f103
+cargo build-stm32f103
 ```
 
-Artifacts:
+Equivalent command:
 
-```text
-build/stm32f103/rotary-inverted-pendulum.elf
-build/stm32f103/rotary-inverted-pendulum.hex
-build/stm32f103/rotary-inverted-pendulum.bin
-build/stm32f103/rotary-inverted-pendulum.map
+```bash
+cargo build -p rip-firmware-stm32f103 --release --target thumbv7m-none-eabi
 ```
+
+The STM32F103 firmware crate uses a 64 KiB FLASH / 20 KiB RAM linker memory definition and is the composition root for target-specific hardware integration.

@@ -2,71 +2,109 @@
 
 > **A ground-up re-architecture of a rotary inverted pendulum control system, from physical I/O to hybrid control.**
 
-The repository defines the control-system architecture for a rotary inverted pendulum. Hardware access, sensing, actuation, state estimation, control, mode ownership, telemetry, safety, and physical actuator authority are explicit boundaries.
-
-The physical plant is the starting point. Controller algorithms are replaceable implementations inside the architecture.
+The implementation is Rust-first and `no_std`. The architecture separates control mathematics, system operation, physical-plant conventions, and target-specific hardware integration.
 
 ## Architecture
 
 ```text
-Physical Plant
-    ↓
-Platform / Hardware Contract
-    ↓
-Sensing & Actuation
-    ↓
-State Estimation
-    ↓
-State Safety
-    ↓
-Control State Machine
-    ↓
-Controller Dispatch
-    ↓
-Actuator Mapping / Output Safety
-    ↓
-Computed Actuator Command
+                    control
+                       ▲
+                       │
+                   supervisor
+                    ▲      ▲
+                    │      │
+                  plant    │
+                    ▲      │
+                    └──┬───┘
+                       │
+                    firmware
+               STM32F103 / RP2350
 ```
 
-Physical motor ownership is separate from control computation:
+The three primary architectural boundaries are:
+
+- **Control Core** — state, estimation, control safety, control regime, controller implementations, and normalized control effort.
+- **System Supervisor** — runtime state, observation cycle, operational policy, motor authority, and consumer-owned I/O ports.
+- **Target Adapter** — MCU-specific startup, interrupts, peripherals, timing, and board integration.
+
+`plant` is a reusable component library for physical conventions such as pendulum conversion, encoder scale, motor sign, and control-effort-to-drive mapping. It is not an additional architecture layer.
+
+## Control semantics
+
+The control state is:
 
 ```text
-Maintenance / Control Request
-        ↓
-Motor Authority Arbiter
-        ↓
-board_motor
-        ↓
-TB6612
-        ↓
-Rotary-Arm Motor
+x = [theta, theta_dot, phi, phi_dot]
 ```
 
-**Computing a control command is not equivalent to having authority to move the motor.**
+where `theta` is the wrapped pendulum angle and `phi` is the continuous rotary-arm angle.
 
-## Implemented system
-
-| Component | Implementation |
-|---|---|
-| Embedded platform | STM32F103 |
-| Shared hardware contract | `platform/api/` |
-| State estimator | Basic estimator |
-| Balance controller | LQR |
-| Automatic-control profile | Observe-only |
-| Automatic motor sink | Unbound |
-| Physical motor path | Bounded maintenance path through `motor_authority` |
-| Maintenance transport | Text UART |
-
-## Platform boundary
+Controllers produce `ControlEffort`. They do not produce PWM, direction GPIO, or H-bridge commands.
 
 ```text
-platform/
-├── api/            Shared board contract
-├── stm32f103/      STM32F103 implementation
-└── rp2350/         Reserved platform namespace
+ControlState
+    ↓
+Controller
+    ↓
+ControlEffort
 ```
 
-The legacy Forest D1 / Forest S1 names are used only for original hardware and documentation provenance. They do not define the software architecture.
+Physical motor semantics are introduced outside the control core:
+
+```text
+ControlEffort
+    ↓
+Plant DriveMap
+    ↓
+DriveCommand
+    ↓
+Motor Authority
+    ↓
+MotorSink
+```
+
+## Operational state and control regime
+
+Operational state and control regime are separate concepts.
+
+```text
+RuntimeState                 ControlRegime
+-----------                  -------------
+Disabled                     SwingUp
+Ready                        Capture
+Active(ControlRegime)        Balance
+Fault(reason)
+```
+
+This prevents hardware/operational state from being conflated with hybrid-control mode transitions.
+
+## Motor authority
+
+`MotorAuthority` keeps a stable runtime type with dynamic authority state:
+
+```text
+Disarmed
+Maintenance
+Control
+Fault
+```
+
+Physical output is available only through a `MaintenanceAccess` or `ControlAccess` capability returned by the authority boundary. The underlying motor sink remains private.
+
+## Source ownership
+
+```text
+crates/control/          Pure control-domain computation
+crates/supervisor/       Runtime supervision and physical authority
+crates/plant/            Physical-plant conversions and drive conventions
+firmware/stm32f103/      STM32F103 target composition
+firmware/rp2350/         RP2350 target namespace when implemented
+docs/architecture/       Architecture definition
+docs/hardware/           Hardware definition and provenance
+docs/development/        Repository/build reference
+```
+
+The previous C/CMake/libopencm3 implementation is retained in Git history rather than in the active source tree.
 
 ## Reference physical plant
 
@@ -91,24 +129,6 @@ Preferred references are:
 
 A reference-backed nominal parameter carries a value, unit, source, and applicability. **Nominal** means a representative engineering value; it is not a claim of specimen-specific calibration.
 
-## Repository ownership
-
-```text
-app/                    Application integration and system orchestration
-control/                Platform-independent estimation, control, safety, and mode logic
-drivers/                Reusable device drivers
-platform/api/           Shared hardware contract
-platform/stm32f103/     STM32F103 implementation
-platform/rp2350/        Reserved platform namespace
-tests/                  Host-side deterministic tests
-tools/                  Runtime and analysis tooling
-docs/architecture/      Architecture and interface contracts
-docs/commissioning/     Firmware and maintenance interfaces
-docs/control/           Controller implementation
-docs/hardware/          Hardware definition
-docs/development/       Repository and build reference
-```
-
 ## Documentation policy
 
 Markdown describes only the resulting system:
@@ -123,15 +143,7 @@ Validation evidence, open questions, unknowns, history, roadmaps, checklists, an
 ## Key documentation
 
 - [Control Architecture](docs/architecture/control_architecture.md)
-- [Control Contracts](docs/architecture/control_contracts.md)
-- [Fault Registry](docs/architecture/fault_registry.md)
-- [Observe-only State Safety](docs/architecture/observe_only_state_safety.md)
-- [Runtime Profiles](docs/architecture/runtime_profiles.md)
-- [Communication and Parameter Architecture](docs/architecture/communications.md)
-- [Telemetry Schema](docs/architecture/telemetry_schema.md)
-- [Firmware Runtime](docs/commissioning/firmware-runtime.md)
-- [Motor Characterization Interface](docs/commissioning/motor-characterization-interface.md)
-- [Controller Implementation](docs/control/controller-implementation.md)
+- [Runtime Supervisor](docs/architecture/runtime_supervisor.md)
 - [Repository Layout](docs/development/repository-layout.md)
 - [Build and Test](docs/development/build-and-test.md)
 - [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md)
