@@ -3,7 +3,7 @@ use rip_control::{
     EstimatorError, EstimatorInput, FaultSet, SafetyLimits,
 };
 
-use crate::{Observation, SensorSource};
+use crate::SensorSource;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ObserveCycle {
