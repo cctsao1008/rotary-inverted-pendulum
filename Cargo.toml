@@ -4,6 +4,7 @@ members = [
     "plant/plant-observation",
     "plant/measurement-model",
     "plant/actuator-model",
+    "plant/dynamics-model",
     "control/state-feedback",
     "control/hybrid-control",
     "supervisor/state-estimator",
@@ -13,12 +14,14 @@ members = [
     "firmware/actuators/tb6612",
     "firmware/adapters/estimator-input",
     "firmware/targets/stm32f103",
+    "tools/simulation",
 ]
 default-members = [
     "plant/robot-domain",
     "plant/plant-observation",
     "plant/measurement-model",
     "plant/actuator-model",
+    "plant/dynamics-model",
     "control/state-feedback",
     "control/hybrid-control",
     "supervisor/state-estimator",
@@ -27,6 +30,7 @@ default-members = [
     "firmware/interfaces/actuation",
     "firmware/actuators/tb6612",
     "firmware/adapters/estimator-input",
+    "tools/simulation",
 ]
 resolver = "2"
 
