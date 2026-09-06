@@ -299,14 +299,15 @@ fn publish_cycle(cycle: ControlCycle) {
             SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
             publish_state(state);
             SHADOW_DEMAND_TORQUE_UNM.store(scale_micro(demand.arm_torque.0), Ordering::Relaxed);
-            SHADOW_BOUNDED_COMMAND_PPM
-                .store(scale_micro(bounded_command.command.get()), Ordering::Relaxed);
+            SHADOW_BOUNDED_COMMAND_PPM.store(
+                scale_micro(bounded_command.command.get()),
+                Ordering::Relaxed,
+            );
             SHADOW_PREDICTED_TORQUE_UNM.store(
                 scale_micro(bounded_command.predicted_arm_torque.0),
                 Ordering::Relaxed,
             );
-            SHADOW_ACTUATOR_SATURATED
-                .store(bounded_command.saturated as u32, Ordering::Relaxed);
+            SHADOW_ACTUATOR_SATURATED.store(bounded_command.saturated as u32, Ordering::Relaxed);
             SHADOW_AUTHORITY_REASONS.store(authority.reasons.bits() as u32, Ordering::Relaxed);
             SHADOW_AUTHORIZED.store(authorized.is_some() as u32, Ordering::Relaxed);
         }
