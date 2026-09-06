@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+rip-actuation-interface = { path = "../../interfaces/actuation" }
 rip-actuator-model = { path = "../../../plant/actuator-model" }
 rip-runtime-state = { path = "../../../supervisor/runtime-state" }
 
