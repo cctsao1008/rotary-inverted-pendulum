@@ -4,5 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[dependencies]
+libm = "0.2"
+rip-robot-domain = { path = "../../plant/robot-domain" }
+rip-state-feedback = { path = "../state-feedback" }
+
 [lib]
 path = "src/lib.rs"
