@@ -1,0 +1,18 @@
+[package]
+name = "rip-simulation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-actuator-model = { path = "../../plant/actuator-model" }
+rip-control-runtime = { path = "../../supervisor/control-runtime" }
+rip-dynamics-model = { path = "../../plant/dynamics-model" }
+rip-estimator-input-adapter = { path = "../../firmware/adapters/estimator-input" }
+rip-hybrid-control = { path = "../../control/hybrid-control" }
+rip-measurement-model = { path = "../../plant/measurement-model" }
+rip-plant-observation = { path = "../../plant/plant-observation" }
+rip-robot-domain = { path = "../../plant/robot-domain" }
+rip-runtime-state = { path = "../../supervisor/runtime-state" }
+rip-state-estimator = { path = "../../supervisor/state-estimator" }
+rip-state-feedback = { path = "../../control/state-feedback" }
