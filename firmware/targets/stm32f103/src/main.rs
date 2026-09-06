@@ -324,10 +324,7 @@ fn main() -> ! {
             Ok(value) => value,
             Err(_) => {
                 timing_characterizer.record_adc_error();
-                timing_characterizer.finish_cycle(
-                    cycle_started.elapsed(),
-                    timebase.ticks_per_us(),
-                );
+                timing_characterizer.finish_cycle(cycle_started.elapsed(), timebase.ticks_per_us());
                 hardware_watchdog.feed();
                 continue;
             }
