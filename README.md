@@ -88,7 +88,9 @@ AuthorityDecision + debugger-visible shadow data
 
 TIM1 provides a fixed 1 kHz control opportunity. The hardware update flag is not treated as a backlog queue: one observed update admits at most one fresh acquisition/control cycle, and missed periods are not replayed. DWT/`MonoTimer` remains the independent monotonic timing source used for timing evidence.
 
-The target also enables the STM32 independent watchdog (`IWDG`) with a 100 ms timeout. The watchdog is fed only after a TIM1 opportunity is admitted, so a stalled firmware loop resets the MCU independently of TIM1 and DWT. Boot re-establishes the D2 motor channel in hard safe-off.
+The target includes on-target runtime timing characterization. Debugger-visible counters expose admitted-cycle count and elapsed time, last/min/max admission period, maximum period jitter relative to the nearest 1 kHz slot, maximum TIM1 admission phase, last/max end-to-end execution time, maximum execution cycles, inferred coalesced/missed ticks, deadline overruns, Supervisor late/timeout counts, ADC errors, and runtime errors. Execution timing covers the admitted sensing → estimation → hybrid control → actuator-model → authority path and its shadow publication.
+
+The target also enables the STM32 independent watchdog (`IWDG`) with a 100 ms timeout. It is fed after each admitted opportunity is serviced, so a stalled firmware loop resets the MCU independently of TIM1 and DWT. Boot re-establishes the D2 motor channel in hard safe-off.
 
 `RuntimeAuthority` remains disarmed and the runtime remains `Ready`, so this executable cannot produce closed-loop `AuthorizedActuation`.
 
@@ -223,7 +225,7 @@ firmware/
 ├── interfaces/actuation/     Authorized physical-output contract
 ├── actuators/tb6612/         TB6612 mapper, proof-gated sink, frame-I/O boundary
 ├── adapters/estimator-input/ Raw observation -> estimator input promotion
-└── targets/stm32f103/        1 kHz live-shadow, IWDG, hard-safe-off D2 binding
+└── targets/stm32f103/        1 kHz live-shadow, timing characterization, IWDG, hard-safe-off D2 binding
 ```
 
 ## Reference-backed nominal parameters
