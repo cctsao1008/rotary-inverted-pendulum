@@ -9,6 +9,10 @@ build.ninja
 cmake_install.cmake
 compile_commands.json
 
+# Rust / Cargo outputs
+/target/
+**/*.rs.bk
+
 # Firmware outputs
 *.elf
 *.hex
