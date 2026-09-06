@@ -75,10 +75,8 @@ impl EnergySwingUpController {
             * self.config.gravity_m_s2
             * self.config.pendulum_com_length_m
             * (1.0 + c);
-        let kinetic = 0.5
-            * self.config.pendulum_inertia_kg_m2
-            * state.theta_dot.0
-            * state.theta_dot.0;
+        let kinetic =
+            0.5 * self.config.pendulum_inertia_kg_m2 * state.theta_dot.0 * state.theta_dot.0;
         let energy = potential + kinetic;
         if energy.is_finite() {
             Ok(energy)
@@ -320,19 +318,28 @@ impl Controller for HybridController {
     type Error = HybridControlError;
 
     fn compute(&mut self, state: &EstimatedState) -> Result<GeneralizedDemand, Self::Error> {
-        let regime = self.capture.update(state).map_err(HybridControlError::Capture)?;
+        let regime = self
+            .capture
+            .update(state)
+            .map_err(HybridControlError::Capture)?;
         match regime {
             ControlRegime::SwingUp => self
                 .swing_up
                 .compute(state)
                 .map_err(HybridControlError::SwingUp),
-            ControlRegime::Balance => self.balance.compute(state).map_err(HybridControlError::Balance),
+            ControlRegime::Balance => self
+                .balance
+                .compute(state)
+                .map_err(HybridControlError::Balance),
             ControlRegime::Capture => {
                 let swing = self
                     .swing_up
                     .compute(state)
                     .map_err(HybridControlError::SwingUp)?;
-                let balance = self.balance.compute(state).map_err(HybridControlError::Balance)?;
+                let balance = self
+                    .balance
+                    .compute(state)
+                    .map_err(HybridControlError::Balance)?;
                 let weight = self.capture.capture_blend_weight(state);
                 let torque = swing.arm_torque.0 * (1.0 - weight) + balance.arm_torque.0 * weight;
                 if !torque.is_finite() {
@@ -426,19 +433,29 @@ mod tests {
 
     #[test]
     fn dead_start_receives_bounded_kick() {
-        let demand = swing()
-            .compute(&state(core::f32::consts::PI, 0.0))
-            .unwrap();
+        let demand = swing().compute(&state(core::f32::consts::PI, 0.0)).unwrap();
         assert_eq!(demand.arm_torque, TorqueNm(0.01));
     }
 
     #[test]
     fn capture_requires_settled_cycles_before_balance() {
         let mut policy = policy();
-        assert_eq!(policy.update(&state(0.30, 0.5)).unwrap(), ControlRegime::Capture);
-        assert_eq!(policy.update(&state(0.10, 0.4)).unwrap(), ControlRegime::Capture);
-        assert_eq!(policy.update(&state(0.10, 0.4)).unwrap(), ControlRegime::Capture);
-        assert_eq!(policy.update(&state(0.10, 0.4)).unwrap(), ControlRegime::Balance);
+        assert_eq!(
+            policy.update(&state(0.30, 0.5)).unwrap(),
+            ControlRegime::Capture
+        );
+        assert_eq!(
+            policy.update(&state(0.10, 0.4)).unwrap(),
+            ControlRegime::Capture
+        );
+        assert_eq!(
+            policy.update(&state(0.10, 0.4)).unwrap(),
+            ControlRegime::Capture
+        );
+        assert_eq!(
+            policy.update(&state(0.10, 0.4)).unwrap(),
+            ControlRegime::Balance
+        );
     }
 
     #[test]
@@ -449,8 +466,14 @@ mod tests {
             policy.update(&state(0.10, 0.4)).unwrap();
         }
         assert_eq!(policy.regime(), ControlRegime::Balance);
-        assert_eq!(policy.update(&state(0.25, 0.5)).unwrap(), ControlRegime::Capture);
-        assert_eq!(policy.update(&state(0.60, 0.5)).unwrap(), ControlRegime::SwingUp);
+        assert_eq!(
+            policy.update(&state(0.25, 0.5)).unwrap(),
+            ControlRegime::Capture
+        );
+        assert_eq!(
+            policy.update(&state(0.60, 0.5)).unwrap(),
+            ControlRegime::SwingUp
+        );
     }
 
     #[test]
