@@ -39,9 +39,7 @@ impl PendulumCalibration {
 
     pub fn angle(self, raw_adc: u16) -> AngleRad {
         AngleRad(wrap_pi(
-            (raw_adc as i32 - self.upright_adc) as f32
-                * self.radians_per_count
-                * self.direction,
+            (raw_adc as i32 - self.upright_adc) as f32 * self.radians_per_count * self.direction,
         ))
     }
 }

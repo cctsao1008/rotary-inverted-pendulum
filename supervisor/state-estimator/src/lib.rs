@@ -98,19 +98,16 @@ impl BasicEstimator {
         }
 
         let dt_s = elapsed_us as f32 * 1.0e-6;
-        let theta_dot_raw =
-            shortest_circular_delta(measurement.theta.0 - previous.theta.0) / dt_s;
+        let theta_dot_raw = shortest_circular_delta(measurement.theta.0 - previous.theta.0) / dt_s;
         let phi_dot_raw = (measurement.phi.0 - previous.phi.0) / dt_s;
         if !theta_dot_raw.is_finite() || !phi_dot_raw.is_finite() {
             return Err(EstimatorError::NonFiniteMeasurement);
         }
 
         let alpha = config.rate_filter_alpha;
-        self.theta_dot = AngularRateRadPerSec(
-            alpha * theta_dot_raw + (1.0 - alpha) * self.theta_dot.0,
-        );
-        self.phi_dot =
-            AngularRateRadPerSec(alpha * phi_dot_raw + (1.0 - alpha) * self.phi_dot.0);
+        self.theta_dot =
+            AngularRateRadPerSec(alpha * theta_dot_raw + (1.0 - alpha) * self.theta_dot.0);
+        self.phi_dot = AngularRateRadPerSec(alpha * phi_dot_raw + (1.0 - alpha) * self.phi_dot.0);
         self.previous = Some(measurement);
 
         Ok(Estimate::Ready(EstimatedState {
@@ -169,7 +166,9 @@ mod tests {
     fn first_measurement_primes_history() {
         let mut estimator = BasicEstimator::new();
         assert_eq!(
-            estimator.step(config(), measurement(0.1, 0.2, 1_000)).unwrap(),
+            estimator
+                .step(config(), measurement(0.1, 0.2, 1_000))
+                .unwrap(),
             Estimate::Primed
         );
     }

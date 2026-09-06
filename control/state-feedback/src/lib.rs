@@ -77,7 +77,10 @@ mod tests {
             validity: StateValidity::Valid,
         };
 
-        assert_eq!(controller.compute(&state).unwrap().arm_torque, TorqueNm(-51.0));
+        assert_eq!(
+            controller.compute(&state).unwrap().arm_torque,
+            TorqueNm(-51.0)
+        );
     }
 
     #[test]

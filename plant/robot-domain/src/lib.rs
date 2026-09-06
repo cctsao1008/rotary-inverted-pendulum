@@ -39,12 +39,7 @@ pub struct EstimatedState {
 
 impl EstimatedState {
     pub const fn as_vector(self) -> [f32; 4] {
-        [
-            self.theta.0,
-            self.theta_dot.0,
-            self.phi.0,
-            self.phi_dot.0,
-        ]
+        [self.theta.0, self.theta_dot.0, self.phi.0, self.phi_dot.0]
     }
 
     pub fn is_finite(self) -> bool {

@@ -7,7 +7,9 @@ use rip_runtime_state::{
     AuthorityContext, AuthorityDecision, AuthorizedActuation, RuntimeAuthority, RuntimeLimits,
     RuntimePolicy, RuntimeQualification, RuntimeState, SensorTimingHealth, WatchdogHealth,
 };
-use rip_state_estimator::{BasicEstimator, Estimate, EstimatorConfig, EstimatorError, EstimatorMeasurement};
+use rip_state_estimator::{
+    BasicEstimator, Estimate, EstimatorConfig, EstimatorError, EstimatorMeasurement,
+};
 use rip_state_feedback::Controller;
 
 /// Supervisor-facing input contract produced by Firmware adapters.

@@ -560,10 +560,16 @@ mod tests {
     #[test]
     fn closed_loop_token_requires_closed_loop_mode_and_healthy_context() {
         let mut authority = RuntimeAuthority::new();
-        assert!(authority.evaluate(healthy_context(), command(false)).authorized().is_none());
+        assert!(authority
+            .evaluate(healthy_context(), command(false))
+            .authorized()
+            .is_none());
 
         authority.enter_closed_loop().unwrap();
-        assert!(authority.evaluate(healthy_context(), command(false)).authorized().is_some());
+        assert!(authority
+            .evaluate(healthy_context(), command(false))
+            .authorized()
+            .is_some());
     }
 
     #[test]
