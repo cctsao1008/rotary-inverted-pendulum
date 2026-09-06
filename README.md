@@ -23,7 +23,7 @@ The implementation is Rust-first and `no_std`. The project shares one architectu
 The four canonical domains are:
 
 - **Plant** — physical state, units, measurement physics, actuator physics, and physical generalized input/output semantics.
-- **Control** — desired closed-loop behavior such as LQR and hybrid control regimes.
+- **Control** — desired closed-loop behavior: energy-based swing-up, capture/transition management, and LQR balance.
 - **Supervisor** — state estimation, runtime qualification, timing health, watchdogs, and physical-output authority.
 - **Firmware** — sensor acquisition, electrical/protocol actuation semantics, board wiring, MCU peripherals, and executable target composition.
 
@@ -49,7 +49,7 @@ STM32F103 PWM / GPIO physical output
 
 `RawObservation` is Plant-owned observation semantics populated by Firmware. `EstimatorMeasurement` is a Supervisor-owned estimator input representation that preserves Plant measurement semantics. State estimation belongs to Supervisor.
 
-The STM32F103 executable currently materializes a **non-actuating live-shadow prefix** through the authority decision:
+The STM32F103 executable materializes the non-actuating computation path through the authority decision:
 
 ```text
 PA7 / ADC1 + PA0/PA1 / TIM2 + DWT timestamp
@@ -64,7 +64,10 @@ BasicEstimator
     ↓
 EstimatedState
     ↓
-LqrController
+HybridController
+    ├── EnergySwingUpController
+    ├── CapturePolicy + blended transition
+    └── LqrController
     ↓
 GeneralizedDemand
     ↓
@@ -77,7 +80,9 @@ RuntimeAuthority::evaluate
 AuthorityDecision + debugger-visible shadow data
 ```
 
-`RuntimeAuthority` remains disarmed and the runtime remains `Ready`, so this target does not produce closed-loop `AuthorizedActuation`. It also does not link an `ActuationSink`, TB6612 electrical mapper, TIM3 motor PWM, or motor-direction GPIO backend.
+`RuntimeAuthority` remains disarmed and the runtime remains `Ready`, so this executable cannot produce closed-loop `AuthorizedActuation`.
+
+The installed D2 motor channel is nevertheless concretely bound in a hard safe-off state at boot: PB1/TIM3_CH4 is configured for 20 kHz PWM with zero duty, and PB13/PB12 are driven low. No runtime `ActuationSink` owns these peripherals, so control computation cannot reach the physical motor.
 
 ## Rotary plant semantics
 
@@ -101,9 +106,23 @@ GeneralizedDemand { arm_torque }
 
 The controller does not emit normalized PWM, direction GPIO, or H-bridge commands. Plant actuator modeling converts physical arm-torque demand into `BoundedActuatorCommand`. Firmware owns TB6612 electrical realization.
 
-## Operational state and hybrid-control regime
+`plant/actuator-model` provides both a compact static torque-span model and a speed-aware DC-motor model with armature resistance, torque constant, back-EMF, gearbox ratio/efficiency, supply-voltage authority, command deadzone, and explicit current limiting.
 
-Operational permission and control regime remain separate:
+## Hybrid control
+
+The Control domain implements three regimes:
+
+```text
+SwingUp
+   ↓ capture window
+Capture
+   ↓ settled upright window
+Balance
+```
+
+`EnergySwingUpController` implements an energy-balance law and a bounded dead-start kick. `CapturePolicy` provides separate entry/exit thresholds, settle-cycle qualification, and hysteresis. During `Capture`, swing-up and LQR torque demands are blended as the pendulum approaches the balance region. `Balance` uses LQR state feedback.
+
+Operational permission remains separate from control regime:
 
 ```text
 RuntimeState                 ControlRegime
@@ -114,7 +133,7 @@ Active(ControlRegime)        Balance
 Fault(reason)
 ```
 
-`Ready` may execute non-actuating live-shadow computation. Closed-loop physical authorization still requires `RuntimeState::Active(...)` plus the other Supervisor authority conditions.
+`Ready` may execute non-actuating live-shadow computation. Closed-loop physical authorization still requires `RuntimeState::Active(...)` plus the remaining Supervisor authority conditions.
 
 ## Physical-output authority
 
@@ -132,9 +151,11 @@ Firmware ActuationSink
 
 `AuthorizedActuation` has no public constructor. Maintenance output uses a distinct `MaintenanceActuation` proof type and a mutually exclusive Supervisor-owned maintenance authority mode.
 
+`firmware/actuators/tb6612` implements the electrical mapper and a generic hardware-facing `Tb6612Output`. The sink accepts only Supervisor proof types and uses a break-before-make sequence: PWM is forced to zero before direction pins change, then the requested duty is applied. The STM32F103 executable does not yet hand its concrete motor peripherals to this sink.
+
 ## Reference-backed nominal live-shadow parameters
 
-The STM32F103 live-shadow controller currently uses a QNET rotary-inverted-pendulum reference model from Abdullah et al. (2021), not Forest D1 specimen calibration.
+The STM32F103 live-shadow controller uses a QNET rotary-inverted-pendulum reference model from Abdullah et al. (2021), not Forest D1 specimen calibration.
 
 The published voltage-domain LQR gain vector and DC-motor constants are converted to the project state order and rotary-arm torque output:
 
@@ -144,34 +165,32 @@ nominal torque-feedback gains:
 [0.18355, 0.01585, 0.01120, 0.00766]
 ```
 
-Using the reference values `Kt = 0.042 N·m/A`, `Rm = 8.4 Ω`, and the reported ±10 V LQR control saturation gives a zero-speed static nominal torque span of `0.05 N·m` for the shadow actuator model. These parameters define only the current reference-backed computation path; they do not grant or justify Forest D1 physical-output authority.
+The live-shadow swing-up model uses the same reference family for pendulum mass, center-of-mass length, inertia, target energy, and energy-balance gain. These values define a reference-backed computation path and are not claims of Forest D1 specimen calibration.
 
 ## Source ownership
 
 ```text
 plant/
-├── robot-domain/            Physical state, units, and generalized demand
-├── plant-observation/       Raw observation semantics
-├── measurement-model/       ADC/encoder measurement physics
-└── actuator-model/          Demand -> bounded actuator command
+├── robot-domain/             Physical state, units, and generalized demand
+├── plant-observation/        Raw observation semantics
+├── measurement-model/        ADC/encoder measurement physics
+└── actuator-model/           Static and speed-aware actuator models
 
 control/
-├── state-feedback/          Controller contract and LQR
-└── hybrid-control/          SwingUp / Capture / Balance regimes
+├── state-feedback/           Controller contract and LQR
+└── hybrid-control/           Energy swing-up, capture policy, LQR transition
 
 supervisor/
-├── state-estimator/         Estimator input contract and state estimation
-├── runtime-state/           Runtime policy, timing, watchdog, authority
-└── control-runtime/         Deterministic portable control composition
+├── state-estimator/          Estimator input contract and state estimation
+├── runtime-state/            Runtime policy, timing, watchdog, authority
+└── control-runtime/          Deterministic portable control composition
 
 firmware/
-├── interfaces/actuation/    Authorized physical-output contract
-├── actuators/tb6612/        TB6612 electrical semantics
+├── interfaces/actuation/     Authorized physical-output contract
+├── actuators/tb6612/         TB6612 mapper and guarded generic sink
 ├── adapters/estimator-input/ Raw observation -> estimator input promotion
-└── targets/stm32f103/       STM32F103 sensing + live-shadow composition
+└── targets/stm32f103/        Sensing, hybrid live-shadow, hard-safe-off D2 binding
 ```
-
-The previous C implementation and superseded Rust architecture are retained in Git history rather than in the active tree.
 
 ## Reference-backed nominal parameters
 
