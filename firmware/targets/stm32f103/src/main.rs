@@ -12,6 +12,10 @@ use rip_control_runtime::{
     ControlCycle, ControlRuntime, RuntimeObservation, RuntimeObservationSource,
 };
 use rip_estimator_input_adapter::{EncoderCounterAccumulator, EstimatorInputAdapter};
+use rip_hybrid_control::{
+    CapturePolicy, CapturePolicyConfig, ControlRegime, EnergySwingUpConfig,
+    EnergySwingUpController, HybridController,
+};
 use rip_measurement_model::{EncoderScale, PendulumCalibration};
 use rip_plant_observation::{
     MeasurementQuality, RawArmEncoderObservation, RawObservation, RawPendulumObservation,
@@ -44,16 +48,33 @@ const SENSOR_LATE_AFTER_US: u64 = 5_000;
 const SENSOR_TIMEOUT_AFTER_US: u64 = 20_000;
 const CONTROL_WATCHDOG_TIMEOUT_US: u64 = 20_000;
 
-// Reference-backed live-shadow controller parameters derived from the QNET RIP
-// model in Abdullah et al. (2021). Their voltage-domain LQR gains and motor
-// constants are converted to equivalent rotary-arm torque-feedback gains in
-// this project's state order [theta, theta_dot, phi, phi_dot]. These values are
-// not Forest D1 calibration and cannot justify physical-output authority.
+// Reference-backed live-shadow controller parameters from the QNET RIP model
+// in Abdullah et al. (2021). These are not Forest D1 specimen calibration.
 const SHADOW_LQR_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, 0.011_20, 0.007_66];
+const SHADOW_PENDULUM_MASS_KG: f32 = 0.04;
+const SHADOW_PENDULUM_COM_LENGTH_M: f32 = 0.129;
+const SHADOW_PENDULUM_INERTIA_KG_M2: f32 = 0.0001;
+const SHADOW_TARGET_ENERGY_J: f32 = 0.025;
+// EBC ku=35 in the reference voltage domain and Kt/Rm=0.005 Nm/V.
+const SHADOW_ENERGY_TORQUE_GAIN: f32 = 0.175;
+const SHADOW_MAX_ABS_TORQUE_NM: f32 = 0.05;
+const SHADOW_SWING_KICK_TORQUE_NM: f32 = 0.01;
+const SHADOW_SWING_KICK_BELOW_RATE_RAD_S: f32 = 0.05;
 
-// QNET reference nominal: Kt/Rm = 0.005 Nm/V and the reported LQR control
-// saturation is +/-10 V, giving a zero-speed static torque span of 0.05 Nm.
-// The actuator model is used only for non-actuating live-shadow computation.
+// Project live-shadow capture policy. The wider Capture window gives explicit
+// hysteresis around the smaller Balance admission region.
+const SHADOW_CAPTURE_ENTER_ANGLE_RAD: f32 = 20.0 * PI / 180.0;
+const SHADOW_CAPTURE_ENTER_RATE_RAD_S: f32 = 3.0;
+const SHADOW_BALANCE_ENTER_ANGLE_RAD: f32 = 8.0 * PI / 180.0;
+const SHADOW_BALANCE_ENTER_RATE_RAD_S: f32 = 1.0;
+const SHADOW_BALANCE_EXIT_ANGLE_RAD: f32 = 12.0 * PI / 180.0;
+const SHADOW_BALANCE_EXIT_RATE_RAD_S: f32 = 2.0;
+const SHADOW_CAPTURE_EXIT_ANGLE_RAD: f32 = 30.0 * PI / 180.0;
+const SHADOW_CAPTURE_EXIT_RATE_RAD_S: f32 = 4.0;
+const SHADOW_CAPTURE_SETTLE_CYCLES: u16 = 20;
+
+// QNET reference nominal: Kt/Rm = 0.005 Nm/V and reported +/-10 V control
+// saturation gives a zero-speed static torque span of 0.05 Nm.
 const SHADOW_ACTUATOR_TORQUE_PER_EFFECTIVE_COMMAND_NM: f32 = 0.05;
 const SHADOW_ACTUATOR_COMMAND_DEADZONE: f32 = 0.0;
 
@@ -65,9 +86,9 @@ const CYCLE_ERROR: u32 = 4;
 
 /// Debugger-visible live-shadow snapshot.
 ///
-/// This target links no ActuationSink, TB6612 electrical mapper, TIM3 motor
-/// PWM, or motor-direction GPIO. Control, actuator-model, and authority
-/// computation therefore terminate in debugger-visible data only.
+/// This target links no ActuationSink, TIM3 motor PWM, or motor-direction GPIO.
+/// Sensing, estimation, hybrid control, actuator-model, and authority computation
+/// therefore terminate in debugger-visible data only.
 static SHADOW_SAMPLE_INDEX: AtomicU32 = AtomicU32::new(0);
 static SHADOW_TIMESTAMP_US_LOW: AtomicU32 = AtomicU32::new(0);
 static SHADOW_PENDULUM_ADC: AtomicU32 = AtomicU32::new(0);
@@ -77,6 +98,7 @@ static SHADOW_THETA_DOT_MRAD_S: AtomicI32 = AtomicI32::new(0);
 static SHADOW_PHI_MRAD: AtomicI32 = AtomicI32::new(0);
 static SHADOW_PHI_DOT_MRAD_S: AtomicI32 = AtomicI32::new(0);
 static SHADOW_CYCLE: AtomicU32 = AtomicU32::new(CYCLE_IDLE);
+static SHADOW_CONTROL_REGIME: AtomicU32 = AtomicU32::new(0);
 static SHADOW_DEMAND_TORQUE_UNM: AtomicI32 = AtomicI32::new(0);
 static SHADOW_BOUNDED_COMMAND_PPM: AtomicI32 = AtomicI32::new(0);
 static SHADOW_PREDICTED_TORQUE_UNM: AtomicI32 = AtomicI32::new(0);
@@ -181,7 +203,33 @@ fn main() -> ! {
         max_gap_us: ESTIMATOR_MAX_GAP_US,
         rate_filter_alpha: ESTIMATOR_RATE_FILTER_ALPHA,
     };
-    let controller = LqrController::new(SHADOW_LQR_TORQUE_GAINS).unwrap();
+    let balance_controller = LqrController::new(SHADOW_LQR_TORQUE_GAINS).unwrap();
+    let swing_up_controller = EnergySwingUpController::new(EnergySwingUpConfig {
+        pendulum_mass_kg: SHADOW_PENDULUM_MASS_KG,
+        pendulum_com_length_m: SHADOW_PENDULUM_COM_LENGTH_M,
+        pendulum_inertia_kg_m2: SHADOW_PENDULUM_INERTIA_KG_M2,
+        gravity_m_s2: 9.81,
+        target_energy_j: SHADOW_TARGET_ENERGY_J,
+        energy_gain: SHADOW_ENERGY_TORQUE_GAIN,
+        max_abs_torque_nm: SHADOW_MAX_ABS_TORQUE_NM,
+        kick_torque_nm: SHADOW_SWING_KICK_TORQUE_NM,
+        kick_below_rate_rad_s: SHADOW_SWING_KICK_BELOW_RATE_RAD_S,
+    })
+    .unwrap();
+    let capture_policy = CapturePolicy::new(CapturePolicyConfig {
+        capture_enter_angle_rad: SHADOW_CAPTURE_ENTER_ANGLE_RAD,
+        capture_enter_rate_rad_s: SHADOW_CAPTURE_ENTER_RATE_RAD_S,
+        balance_enter_angle_rad: SHADOW_BALANCE_ENTER_ANGLE_RAD,
+        balance_enter_rate_rad_s: SHADOW_BALANCE_ENTER_RATE_RAD_S,
+        balance_exit_angle_rad: SHADOW_BALANCE_EXIT_ANGLE_RAD,
+        balance_exit_rate_rad_s: SHADOW_BALANCE_EXIT_RATE_RAD_S,
+        capture_exit_angle_rad: SHADOW_CAPTURE_EXIT_ANGLE_RAD,
+        capture_exit_rate_rad_s: SHADOW_CAPTURE_EXIT_RATE_RAD_S,
+        settle_cycles: SHADOW_CAPTURE_SETTLE_CYCLES,
+    })
+    .unwrap();
+    let controller = HybridController::new(swing_up_controller, balance_controller, capture_policy);
+
     let actuator_model = ArmActuatorModel::new(
         ArmActuatorParameters::new(
             SHADOW_ACTUATOR_TORQUE_PER_EFFECTIVE_COMMAND_NM,
@@ -198,9 +246,9 @@ fn main() -> ! {
         actuator_model,
     );
 
-    // RuntimeAuthority remains disarmed and RuntimeState remains Ready. The
-    // authority decision is evaluated on every computed cycle, but an
-    // AuthorizedActuation token cannot be produced in this target state.
+    // RuntimeAuthority remains disarmed and RuntimeState remains Ready. Hybrid
+    // regime selection and authority evaluation execute on every computed cycle,
+    // but this target cannot produce physical closed-loop output.
     let timing_limits = SensorTimingLimits::new(
         SENSOR_EXPECTED_PERIOD_US,
         SENSOR_LATE_AFTER_US,
@@ -258,6 +306,7 @@ fn main() -> ! {
             match runtime.step() {
                 Ok(cycle) => {
                     publish_cycle(cycle);
+                    publish_regime(runtime.controller().regime());
                     watchdog.kick(captured_at.0);
                 }
                 Err(_) => publish_cycle_error(),
@@ -334,6 +383,15 @@ fn publish_state(state: EstimatedState) {
     SHADOW_THETA_DOT_MRAD_S.store(scale_milli(state.theta_dot.0), Ordering::Relaxed);
     SHADOW_PHI_MRAD.store(scale_milli(state.phi.0), Ordering::Relaxed);
     SHADOW_PHI_DOT_MRAD_S.store(scale_milli(state.phi_dot.0), Ordering::Relaxed);
+}
+
+fn publish_regime(regime: ControlRegime) {
+    let code = match regime {
+        ControlRegime::SwingUp => 0,
+        ControlRegime::Capture => 1,
+        ControlRegime::Balance => 2,
+    };
+    SHADOW_CONTROL_REGIME.store(code, Ordering::Relaxed);
 }
 
 fn publish_runtime_health(timing: SensorTimingHealth, watchdog: WatchdogHealth) {
