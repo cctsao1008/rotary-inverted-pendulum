@@ -152,16 +152,16 @@ impl DcMotorActuatorModel {
             demand.arm_torque.0 / (p.gear_ratio_motor_per_arm * p.gear_efficiency);
         let required_current = required_motor_torque / p.torque_constant_nm_per_a;
         let current_limited = required_current.clamp(-p.max_abs_current_a, p.max_abs_current_a);
-        let required_voltage = current_limited * p.armature_resistance_ohm
-            + p.back_emf_v_per_rad_s * motor_rate;
+        let required_voltage =
+            current_limited * p.armature_resistance_ohm + p.back_emf_v_per_rad_s * motor_rate;
         let required_effective_command = required_voltage / p.supply_voltage_v;
 
         if !required_effective_command.is_finite() {
             return Err(ActuatorModelError::NonFiniteDemand);
         }
 
-        let saturated = required_current.abs() > p.max_abs_current_a
-            || required_effective_command.abs() > 1.0;
+        let saturated =
+            required_current.abs() > p.max_abs_current_a || required_effective_command.abs() > 1.0;
         let bounded_effective = required_effective_command.clamp(-1.0, 1.0);
         let command_value = inverse_effective_command(bounded_effective, p.command_deadzone);
         let command = NormalizedCommand::new(command_value).expect("bounded inverse command");
