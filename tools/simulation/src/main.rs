@@ -552,7 +552,7 @@ fn validate_config(config: SimulationConfig) -> Result<(), String> {
     if !config.duration_s.is_finite() || config.duration_s <= 0.0 {
         return Err("--duration-s must be positive".to_owned());
     }
-    if config.plant_step_us == 0 || CONTROL_PERIOD_US % config.plant_step_us != 0 {
+    if config.plant_step_us == 0 || !CONTROL_PERIOD_US.is_multiple_of(config.plant_step_us) {
         return Err("--plant-step-us must be a non-zero divisor of 1000".to_owned());
     }
     if config.csv_stride == 0 {
