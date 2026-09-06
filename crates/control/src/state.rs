@@ -32,7 +32,12 @@ impl ControlState {
     }
 
     pub const fn as_vector(&self) -> [f32; 4] {
-        [self.theta_rad, self.theta_dot_rad_s, self.phi_rad, self.phi_dot_rad_s]
+        [
+            self.theta_rad,
+            self.theta_dot_rad_s,
+            self.phi_rad,
+            self.phi_dot_rad_s,
+        ]
     }
 }
 

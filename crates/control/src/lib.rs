@@ -8,7 +8,10 @@ pub mod regime;
 pub mod safety;
 pub mod state;
 
-pub use controller::{lqr::{LqrConfigError, LqrController, LqrError}, Controller};
+pub use controller::{
+    lqr::{LqrConfigError, LqrController, LqrError},
+    Controller,
+};
 pub use effort::{ControlEffort, EffortError};
 pub use estimator::{BasicEstimator, Estimate, EstimatorConfig, EstimatorError};
 pub use regime::ControlRegime;

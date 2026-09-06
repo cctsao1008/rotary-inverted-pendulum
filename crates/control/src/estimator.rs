@@ -137,7 +137,9 @@ mod tests {
     fn first_sample_primes_history() {
         let mut estimator = BasicEstimator::new();
         assert_eq!(
-            estimator.step(&config(), EstimatorInput::new(0.1, 0.2, 1_000)).unwrap(),
+            estimator
+                .step(&config(), EstimatorInput::new(0.1, 0.2, 1_000))
+                .unwrap(),
             Estimate::Primed
         );
     }
@@ -145,8 +147,13 @@ mod tests {
     #[test]
     fn theta_rate_uses_shortest_circular_delta() {
         let mut estimator = BasicEstimator::new();
-        estimator.step(&config(), EstimatorInput::new(3.13, 0.0, 1_000)).unwrap();
-        match estimator.step(&config(), EstimatorInput::new(-3.13, 0.0, 11_000)).unwrap() {
+        estimator
+            .step(&config(), EstimatorInput::new(3.13, 0.0, 1_000))
+            .unwrap();
+        match estimator
+            .step(&config(), EstimatorInput::new(-3.13, 0.0, 11_000))
+            .unwrap()
+        {
             Estimate::Ready(state) => assert!(state.theta_dot_rad_s.abs() < 10.0),
             Estimate::Primed => panic!("second sample must produce an estimate"),
         }

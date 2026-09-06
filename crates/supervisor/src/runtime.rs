@@ -8,7 +8,9 @@ use crate::{Observation, SensorSource};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ObserveCycle {
     Primed,
-    Rejected { faults: FaultSet },
+    Rejected {
+        faults: FaultSet,
+    },
     Computed {
         state: rip_control::ControlState,
         effort: ControlEffort,
@@ -80,7 +82,10 @@ where
             });
         }
 
-        let effort = self.controller.compute(&state).map_err(CycleError::Controller)?;
+        let effort = self
+            .controller
+            .compute(&state)
+            .map_err(CycleError::Controller)?;
         Ok(ObserveCycle::Computed { state, effort })
     }
 }

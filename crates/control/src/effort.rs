@@ -34,6 +34,9 @@ mod tests {
     #[test]
     fn effort_is_bounded() {
         assert_eq!(ControlEffort::try_new(1.1), Err(EffortError::OutOfRange));
-        assert_eq!(ControlEffort::try_new(f32::NAN), Err(EffortError::NonFinite));
+        assert_eq!(
+            ControlEffort::try_new(f32::NAN),
+            Err(EffortError::NonFinite)
+        );
     }
 }
