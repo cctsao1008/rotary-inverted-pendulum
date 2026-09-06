@@ -124,7 +124,8 @@ impl FurutaPlant {
         let sixth = dt_s / 6.0;
         self.state = FurutaState {
             theta: s0.theta
-                + sixth * (k1.theta_dot + 2.0 * k2.theta_dot + 2.0 * k3.theta_dot + k4.theta_dot),
+                + sixth
+                    * (k1.theta_dot + 2.0 * k2.theta_dot + 2.0 * k3.theta_dot + k4.theta_dot),
             theta_dot: s0.theta_dot
                 + sixth
                     * (k1.theta_ddot
@@ -169,8 +170,7 @@ fn derivative_for(
         return Err(DynamicsError::SingularMassMatrix);
     }
 
-    let arm_rhs = arm_torque.0
-        - parameters.arm_viscous_damping_nm_per_rad_s * state.phi_dot
+    let arm_rhs = arm_torque.0 - parameters.arm_viscous_damping_nm_per_rad_s * state.phi_dot
         + c * sin_theta * state.theta_dot * state.theta_dot;
     let pendulum_rhs = parameters.pendulum_mass_kg
         * parameters.gravity_m_s2
