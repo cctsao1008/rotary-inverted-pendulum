@@ -32,7 +32,7 @@ use stm32f1xx_hal::{
     prelude::*,
     rcc,
     time::{Instant, MonoTimer},
-    timer::{pwm_input::QeiOptions, Timer},
+    timer::{pwm_input::QeiOptions, Tim3NoRemap, Timer},
 };
 
 const PENDULUM_UPRIGHT_ADC: u16 = 2_928;
@@ -178,6 +178,7 @@ fn main() -> ! {
             .adcclk(12.MHz()),
         &mut flash.acr,
     );
+    let mut afio = dp.AFIO.constrain(&mut rcc);
 
     let mut gpioa = dp.GPIOA.split(&mut rcc);
     let mut gpiob = dp.GPIOB.split(&mut rcc);
@@ -193,8 +194,11 @@ fn main() -> ! {
     let mut motor_in2 = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
     motor_in1.set_low();
     motor_in2.set_low();
-    let (_motor_pwm_manager, (.., motor_pwm_channel)) = dp.TIM3.pwm_hz(20.kHz(), &mut rcc);
-    let mut motor_pwm = motor_pwm_channel.with(gpiob.pb1);
+    let motor_pwm_pin = gpiob.pb1.into_alternate_push_pull(&mut gpiob.crl);
+    let mut motor_pwm = dp
+        .TIM3
+        .pwm_hz::<Tim3NoRemap, _, _>(motor_pwm_pin, &mut afio.mapr, 20.kHz(), &mut rcc)
+        .split();
     motor_pwm.set_duty(0);
     motor_pwm.enable();
 
