@@ -97,6 +97,9 @@ pub enum Tb6612OutputError<PwmError, In1Error, In2Error> {
     In2(In2Error),
 }
 
+pub type Tb6612OutputResult<PwmError, In1Error, In2Error> =
+    Result<(), Tb6612OutputError<PwmError, In1Error, In2Error>>;
+
 /// Hardware-facing TB6612 sink with an explicit break-before-make sequence.
 ///
 /// Direction pins are never changed while a non-zero PWM request remains
@@ -127,7 +130,7 @@ where
     pub fn apply_frame(
         &mut self,
         frame: Tb6612ElectricalActuation,
-    ) -> Result<(), Tb6612OutputError<Pwm::Error, In1::Error, In2::Error>> {
+    ) -> Tb6612OutputResult<Pwm::Error, In1::Error, In2::Error> {
         if !frame.is_valid() {
             return Err(Tb6612OutputError::InvalidFrame);
         }
