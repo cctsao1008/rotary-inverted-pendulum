@@ -33,6 +33,7 @@ use stm32f1xx_hal::{
     rcc,
     time::{Instant, MonoTimer},
     timer::{pwm_input::QeiOptions, Tim3NoRemap, Timer},
+    watchdog::IndependentWatchdog,
 };
 
 const PENDULUM_UPRIGHT_ADC: u16 = 2_928;
@@ -47,6 +48,7 @@ const SENSOR_EXPECTED_PERIOD_US: u64 = 1_000;
 const SENSOR_LATE_AFTER_US: u64 = 5_000;
 const SENSOR_TIMEOUT_AFTER_US: u64 = 20_000;
 const CONTROL_WATCHDOG_TIMEOUT_US: u64 = 20_000;
+const HARDWARE_WATCHDOG_TIMEOUT_MS: u32 = 100;
 
 // Reference-backed live-shadow controller parameters from the QNET RIP model
 // in Abdullah et al. (2021). These are not Forest D1 specimen calibration.
@@ -202,9 +204,20 @@ fn main() -> ! {
     motor_pwm.set_duty(0);
     motor_pwm.enable();
 
+    // TIM1 owns the 1 kHz control opportunity. The update flag is one hardware
+    // bit rather than a queue, so overrun periods coalesce instead of replaying
+    // historical control cycles. DWT time remains the independent timing truth.
+    let mut control_tick = Timer::new(dp.TIM1, &mut rcc).counter_hz();
+    control_tick.start(1.kHz()).unwrap();
+
     let monotonic = MonoTimer::new(cp.DWT, cp.DCB, &rcc.clocks);
     let mut timebase = MicrosecondTimebase::new(monotonic);
-    let mut delay = cp.SYST.delay(&rcc.clocks);
+
+    // IWDG is independent of TIM1/DWT. A stalled firmware loop therefore resets
+    // the MCU, after which D2 is re-established in the hard-safe-off boot state.
+    let mut hardware_watchdog = IndependentWatchdog::new(dp.IWDG);
+    hardware_watchdog.stop_on_debug(&dp.DBGMCU, true);
+    hardware_watchdog.start(HARDWARE_WATCHDOG_TIMEOUT_MS.millis());
 
     let pendulum_calibration = PendulumCalibration::new(
         PENDULUM_UPRIGHT_ADC,
@@ -282,12 +295,14 @@ fn main() -> ! {
     let mut sample_index = 0_u32;
 
     loop {
+        // Exactly one fresh acquisition/control opportunity is admitted per
+        // observed TIM1 update flag. Missed periods are never replayed.
+        while control_tick.wait().is_err() {}
+        hardware_watchdog.feed();
+
         let adc_raw: u16 = match adc1.read(&mut pendulum_pin) {
             Ok(value) => value,
-            Err(_) => {
-                delay.delay_ms(1_u16);
-                continue;
-            }
+            Err(_) => continue,
         };
         let accumulated_count = encoder_accumulator.update(qei.count());
         let captured_at = timebase.now();
@@ -330,8 +345,6 @@ fn main() -> ! {
                 Err(_) => publish_cycle_error(),
             }
         }
-
-        delay.delay_ms(1_u16);
     }
 }
 
