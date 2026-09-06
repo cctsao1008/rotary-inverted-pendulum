@@ -102,6 +102,15 @@ where
         self.runtime_state = state;
     }
 
+    /// Mutable access to the consumer-owned observation source.
+    ///
+    /// Firmware targets use this to submit one freshly acquired observation
+    /// without taking ownership of estimator, controller, actuator-model, or
+    /// authority semantics.
+    pub fn source_mut(&mut self) -> &mut S {
+        &mut self.source
+    }
+
     pub fn authority_mut(&mut self) -> &mut RuntimeAuthority {
         &mut self.authority
     }
@@ -227,5 +236,13 @@ mod tests {
             }
             _ => panic!("second observation must compute"),
         }
+    }
+
+    #[test]
+    fn observation_source_can_be_updated_without_exposing_runtime_internals() {
+        let mut runtime = runtime();
+        runtime.source_mut().index = 1;
+
+        assert_eq!(runtime.source.index, 1);
     }
 }
