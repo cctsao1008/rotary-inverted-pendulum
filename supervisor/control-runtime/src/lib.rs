@@ -111,6 +111,11 @@ where
         &mut self.source
     }
 
+    /// Read-only access to controller state for non-authoritative telemetry.
+    pub const fn controller(&self) -> &C {
+        &self.controller
+    }
+
     pub fn authority_mut(&mut self) -> &mut RuntimeAuthority {
         &mut self.authority
     }
@@ -244,5 +249,11 @@ mod tests {
         runtime.source_mut().index = 1;
 
         assert_eq!(runtime.source.index, 1);
+    }
+
+    #[test]
+    fn controller_state_is_available_read_only() {
+        let runtime = runtime();
+        assert_eq!(runtime.controller().gains(), [0.1, 0.01, 0.1, 0.01]);
     }
 }
