@@ -1,14 +1,30 @@
 [workspace]
 members = [
-    "crates/control",
-    "crates/plant",
-    "crates/supervisor",
-    "firmware/stm32f103",
+    "plant/robot-domain",
+    "plant/plant-observation",
+    "plant/measurement-model",
+    "plant/actuator-model",
+    "control/state-feedback",
+    "control/hybrid-control",
+    "supervisor/state-estimator",
+    "supervisor/runtime-state",
+    "supervisor/control-runtime",
+    "firmware/interfaces/actuation",
+    "firmware/actuators/tb6612",
+    "firmware/targets/stm32f103",
 ]
 default-members = [
-    "crates/control",
-    "crates/plant",
-    "crates/supervisor",
+    "plant/robot-domain",
+    "plant/plant-observation",
+    "plant/measurement-model",
+    "plant/actuator-model",
+    "control/state-feedback",
+    "control/hybrid-control",
+    "supervisor/state-estimator",
+    "supervisor/runtime-state",
+    "supervisor/control-runtime",
+    "firmware/interfaces/actuation",
+    "firmware/actuators/tb6612",
 ]
 resolver = "2"
 
@@ -16,3 +32,9 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

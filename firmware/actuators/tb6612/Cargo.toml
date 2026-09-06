@@ -1,0 +1,16 @@
+[package]
+name = "rip-tb6612-actuation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-actuator-model = { path = "../../../plant/actuator-model" }
+rip-runtime-state = { path = "../../../supervisor/runtime-state" }
+
+[dev-dependencies]
+rip-hybrid-control = { path = "../../../control/hybrid-control" }
+rip-robot-domain = { path = "../../../plant/robot-domain" }
+
+[lib]
+path = "src/lib.rs"

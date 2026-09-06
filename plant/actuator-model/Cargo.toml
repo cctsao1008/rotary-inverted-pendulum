@@ -1,0 +1,11 @@
+[package]
+name = "rip-actuator-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-robot-domain = { path = "../robot-domain" }
+
+[lib]
+path = "src/lib.rs"

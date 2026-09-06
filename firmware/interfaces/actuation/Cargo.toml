@@ -1,0 +1,11 @@
+[package]
+name = "rip-actuation-interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-runtime-state = { path = "../../../supervisor/runtime-state" }
+
+[lib]
+path = "src/lib.rs"

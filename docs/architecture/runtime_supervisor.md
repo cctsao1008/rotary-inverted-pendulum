@@ -1,8 +1,8 @@
 # Runtime Supervisor
 
-## Operational state
+## Operating state and control regime
 
-Operational state is separate from the hybrid-control regime.
+Operational state is separate from hybrid-control regime.
 
 ```rust
 RuntimeState::Disabled
@@ -11,57 +11,96 @@ RuntimeState::Active(ControlRegime)
 RuntimeState::Fault(FaultReason)
 ```
 
-`ControlRegime` contains only physical control regimes:
-
 ```rust
 ControlRegime::SwingUp
 ControlRegime::Capture
 ControlRegime::Balance
 ```
 
-This separation prevents operational permissions and controller selection from being represented by one overloaded mode enumeration.
+## State estimation
 
-## Observe runtime
-
-`ObserveRuntime` implements the non-actuating computation path:
+State estimation belongs to Supervisor.
 
 ```text
-SensorSource
-    ↓
-Observation
+EstimatorMeasurement
     ↓
 BasicEstimator
     ↓
-ControlSafety
+EstimatedState
+```
+
+The estimator uses the shortest circular delta for pendulum angle and continuous delta for rotary-arm angle. Timestamp ordering and maximum-gap handling are estimator runtime validity concerns.
+
+## Runtime qualification
+
+`RuntimePolicy` owns operational qualification of an estimate using:
+
+- sensor-valid evidence;
+- sample age;
+- estimate readiness/finiteness;
+- configured state/rate operating limits.
+
+Physical state definitions remain Plant-owned; the decision whether a sample may participate in runtime control remains Supervisor-owned.
+
+## Timing and watchdog health
+
+`SensorTimingMonitor` classifies the primary observation cadence as `Startup`, `Healthy`, `Late`, or `Timeout`.
+
+`ControlWatchdog` independently classifies control liveness as `Disarmed`, `Healthy`, or `Expired`.
+
+Both are explicit authority evidence.
+
+## Closed-loop authority
+
+Closed-loop authority is a semantic promotion:
+
+```text
+BoundedActuatorCommand
+        ↓
+RuntimeAuthority::evaluate
+        ↓
+AuthorizedActuation
+```
+
+Authorization requires:
+
+- closed-loop authority mode;
+- `RuntimeState::Active(...)`;
+- healthy sensor timing;
+- healthy watchdog;
+- valid estimate;
+- successful runtime qualification.
+
+Actuator-model saturation remains explicit in the authority decision as a constrained condition.
+
+`AuthorizedActuation` has no public constructor.
+
+## Maintenance authority
+
+Maintenance output uses a separate `MaintenanceActuation` proof type. `RuntimeAuthority` keeps maintenance and closed-loop authority mutually exclusive. Maintenance cannot construct a closed-loop `AuthorizedActuation`.
+
+## Portable control runtime
+
+`ControlRuntime` composes the deterministic portable path:
+
+```text
+RuntimeObservation
+    ↓
+EstimatorMeasurement
+    ↓
+BasicEstimator
+    ↓
+RuntimePolicy
     ↓
 Controller
     ↓
-ControlEffort
+GeneralizedDemand
+    ↓
+ArmActuatorModel
+    ↓
+BoundedActuatorCommand
+    ↓
+RuntimeAuthority
 ```
 
-The observe runtime has no `MotorSink` dependency and therefore cannot actuate the plant.
-
-## Motor authority
-
-`MotorAuthority<M>` owns the physical motor sink and keeps it private.
-
-Authority state is runtime-dynamic:
-
-```text
-Disarmed
-Maintenance
-Control
-Fault
-```
-
-Command access is capability-based:
-
-```text
-MotorAuthority
-    ├── maintenance_access() -> MaintenanceAccess
-    └── control_access()     -> ControlAccess
-```
-
-Only those access capabilities expose `apply(DriveCommand)`. A fault or release path forces `safe_off()` before changing ownership state.
-
-This design combines dynamic operational transitions with compiler-enforced restriction of the physical output surface.
+`ControlRuntime` has no physical `ActuationSink` dependency. Firmware remains the only domain capable of realizing electrical output.

@@ -1,0 +1,15 @@
+[package]
+name = "rip-control-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-actuator-model = { path = "../../plant/actuator-model" }
+rip-robot-domain = { path = "../../plant/robot-domain" }
+rip-runtime-state = { path = "../runtime-state" }
+rip-state-estimator = { path = "../state-estimator" }
+rip-state-feedback = { path = "../../control/state-feedback" }
+
+[lib]
+path = "src/lib.rs"

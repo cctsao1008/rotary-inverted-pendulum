@@ -1,39 +1,55 @@
 # Repository Layout
 
-The active source tree is Rust-first.
+The active source tree is Rust-first and exposes the four architectural domains directly at repository root.
 
 ```text
 Cargo.toml
 rust-toolchain.toml
 .cargo/
 
-crates/
-├── control/             Pure `no_std` control computation
-├── supervisor/          Runtime supervision, ports, and motor authority
-└── plant/               Plant conversions and drive conventions
+plant/
+├── robot-domain/
+├── plant-observation/
+├── measurement-model/
+└── actuator-model/
+
+control/
+├── state-feedback/
+└── hybrid-control/
+
+supervisor/
+├── state-estimator/
+├── runtime-state/
+└── control-runtime/
 
 firmware/
-└── stm32f103/           STM32F103 composition root and linker memory definition
+├── interfaces/actuation/
+├── actuators/tb6612/
+└── targets/stm32f103/
 
 docs/
-├── architecture/        Architecture and interface definitions
-├── hardware/            Hardware definition and provenance
-└── development/         Repository/build reference
+├── architecture/
+├── hardware/
+└── development/
 ```
 
-The previous C application, C control core, board API, libopencm3 platform implementation, CMake build, legacy drivers, and C host tests are not part of the active tree. Git history retains them.
+There is no generic top-level `crates/` container. Domain ownership is visible in the path itself.
 
 ## Dependency direction
 
+Portable dependency flow follows semantic ownership:
+
 ```text
-control
-  ▲
-  │
-plant ◄── supervisor
-  ▲          ▲
-  └────┬─────┘
-       │
-    firmware
+Plant semantics
+   ▲      ▲
+   │      │
+Control  Supervisor
+   ▲        ▲
+   └────┬───┘
+        │
+     Firmware
 ```
 
-`control` is independent of target hardware and physical actuator representation. `plant` may depend on control-domain value types. `supervisor` composes control and plant semantics. Firmware implements target-specific ports and owns hardware integration.
+Control consumes Plant semantics. Supervisor composes Plant and Control behavior while owning estimation and authority. Firmware depends on the portable domains and owns physical realization.
+
+The previous C implementation and superseded Rust layout are retained in Git history rather than in the active source tree.

@@ -2,36 +2,56 @@
 
 > **A ground-up re-architecture of a rotary inverted pendulum control system, from physical I/O to hybrid control.**
 
-The implementation is Rust-first and `no_std`. The architecture separates control mathematics, system operation, physical-plant conventions, and target-specific hardware integration.
+The implementation is Rust-first and `no_std`. The project shares one architectural grammar with `single-wheel-platform`: **same architecture, different plant**.
 
 ## Architecture
 
 ```text
-                    control
-                       ▲
-                       │
-                   supervisor
-                    ▲      ▲
-                    │      │
-                  plant    │
-                    ▲      │
-                    └──┬───┘
-                       │
-                    firmware
-               STM32F103 / RP2350
+                  CONTROL
+                     ▲
+                     │
+                 SUPERVISOR
+                  ▲      ▲
+                  │      │
+                PLANT    │
+                  ▲      │
+                  └──┬───┘
+                     │
+                 FIRMWARE
 ```
 
-The three primary architectural boundaries are:
+The four canonical domains are:
 
-- **Control Core** — state, estimation, control safety, control regime, controller implementations, and normalized control effort.
-- **System Supervisor** — runtime state, observation cycle, operational policy, motor authority, and consumer-owned I/O ports.
-- **Target Adapter** — MCU-specific startup, interrupts, peripherals, timing, and board integration.
+- **Plant** — physical state, units, measurement physics, actuator physics, and physical generalized input/output semantics.
+- **Control** — desired closed-loop behavior such as LQR and hybrid control regimes.
+- **Supervisor** — state estimation, runtime qualification, timing health, watchdogs, and physical-output authority.
+- **Firmware** — sensor acquisition, electrical/protocol actuation semantics, board wiring, MCU peripherals, and executable target composition.
 
-`plant` is a reusable component library for physical conventions such as pendulum conversion, encoder scale, motor sign, and control-effort-to-drive mapping. It is not an additional architecture layer.
+## Typed semantic path
 
-## Control semantics
+```text
+RawObservation
+    ↓
+EstimatorMeasurement
+    ↓
+EstimatedState
+    ↓
+GeneralizedDemand
+    ↓
+BoundedActuatorCommand
+    ↓
+AuthorizedActuation
+    ↓
+Tb6612ElectricalActuation
+    ↓
+STM32F103 PWM / GPIO physical output
+```
 
-The control state is:
+`RawObservation` is Plant-owned observation semantics populated by Firmware. `EstimatorMeasurement` is a Supervisor-owned estimator input representation that preserves Plant measurement semantics. State estimation belongs to Supervisor.
+
+## Rotary plant semantics
+
+The estimated state is:
 
 ```text
 x = [theta, theta_dot, phi, phi_dot]
@@ -39,33 +59,21 @@ x = [theta, theta_dot, phi, phi_dot]
 
 where `theta` is the wrapped pendulum angle and `phi` is the continuous rotary-arm angle.
 
-Controllers produce `ControlEffort`. They do not produce PWM, direction GPIO, or H-bridge commands.
+Control produces a physical generalized demand:
 
 ```text
-ControlState
+EstimatedState
     ↓
 Controller
     ↓
-ControlEffort
+GeneralizedDemand { arm_torque }
 ```
 
-Physical motor semantics are introduced outside the control core:
+The controller does not emit normalized PWM, direction GPIO, or H-bridge commands. Plant actuator modeling converts physical arm-torque demand into `BoundedActuatorCommand`. Firmware owns TB6612 electrical realization.
 
-```text
-ControlEffort
-    ↓
-Plant DriveMap
-    ↓
-DriveCommand
-    ↓
-Motor Authority
-    ↓
-MotorSink
-```
+## Operational state and hybrid-control regime
 
-## Operational state and control regime
-
-Operational state and control regime are separate concepts.
+Operational permission and control regime remain separate:
 
 ```text
 RuntimeState                 ControlRegime
@@ -76,69 +84,55 @@ Active(ControlRegime)        Balance
 Fault(reason)
 ```
 
-This prevents hardware/operational state from being conflated with hybrid-control mode transitions.
+## Physical-output authority
 
-## Motor authority
-
-`MotorAuthority` keeps a stable runtime type with dynamic authority state:
+Closed-loop physical output requires semantic promotion by Supervisor:
 
 ```text
-Disarmed
-Maintenance
-Control
-Fault
+BoundedActuatorCommand
+        ↓
+RuntimeAuthority
+        ↓
+AuthorizedActuation
+        ↓
+Firmware ActuationSink
 ```
 
-Physical output is available only through a `MaintenanceAccess` or `ControlAccess` capability returned by the authority boundary. The underlying motor sink remains private.
+`AuthorizedActuation` has no public constructor. Maintenance output uses a distinct `MaintenanceActuation` proof type and a mutually exclusive Supervisor-owned maintenance authority mode.
 
 ## Source ownership
 
 ```text
-crates/control/          Pure control-domain computation
-crates/supervisor/       Runtime supervision and physical authority
-crates/plant/            Physical-plant conversions and drive conventions
-firmware/stm32f103/      STM32F103 target composition
-firmware/rp2350/         RP2350 target namespace when implemented
-docs/architecture/       Architecture definition
-docs/hardware/           Hardware definition and provenance
-docs/development/        Repository/build reference
+plant/
+├── robot-domain/            Physical state, units, and generalized demand
+├── plant-observation/       Raw observation semantics
+├── measurement-model/       ADC/encoder measurement physics
+└── actuator-model/          Demand -> bounded actuator command
+
+control/
+├── state-feedback/          Controller contract and LQR
+└── hybrid-control/          SwingUp / Capture / Balance regimes
+
+supervisor/
+├── state-estimator/         Estimator input contract and state estimation
+├── runtime-state/           Runtime policy, timing, watchdog, authority
+└── control-runtime/         Deterministic portable control composition
+
+firmware/
+├── interfaces/actuation/    Authorized physical-output contract
+├── actuators/tb6612/        TB6612 electrical semantics
+└── targets/stm32f103/       STM32F103 executable composition
 ```
 
-The previous C/CMake/libopencm3 implementation is retained in Git history rather than in the active source tree.
-
-## Reference physical plant
-
-- STM32F103C8T6 reference controller
-- geared nominal 12 V rotary-arm DC motor
-- quadrature Hall encoder
-- conductive-plastic pendulum angular-position sensor
-- TB6612FNG H-bridge
-- original rotary inverted-pendulum mechanical plant
-
-See [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
+The previous C implementation and superseded Rust architecture are retained in Git history rather than in the active tree.
 
 ## Reference-backed nominal parameters
 
-Physical and model parameters may use **reference-backed nominal values** when a project-specific value is not part of the implemented system definition.
-
-Preferred references are:
-
-1. component datasheets and vendor hardware documentation;
-2. published papers, theses, and technical reports for comparable rotary/Furuta pendulums;
-3. documented public implementations and experimental datasets with sufficiently similar mechanics, sensing, actuation, or motor characteristics.
-
-A reference-backed nominal parameter carries a value, unit, source, and applicability. **Nominal** means a representative engineering value; it is not a claim of specimen-specific calibration.
+Physical and model parameters may use **reference-backed nominal values** when a project-specific value is not part of the implemented system definition. A nominal parameter carries a value, unit, source, and applicability; it is not a claim of specimen-specific calibration.
 
 ## Documentation policy
 
-Markdown describes only the resulting system:
-
-- architecture;
-- interfaces and contracts;
-- implemented behavior and reference usage;
-- selected reference-backed nominal parameters.
-
-Validation evidence, open questions, unknowns, history, roadmaps, checklists, and next actions belong outside Markdown.
+Markdown describes only the resulting system: architecture, interfaces/contracts, implemented behavior/reference usage, and selected reference-backed nominal parameters. History, roadmaps, checklists, validation logs, and unresolved work belong outside project Markdown.
 
 ## Key documentation
 

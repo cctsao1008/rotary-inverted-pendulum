@@ -10,15 +10,21 @@ The repository uses the stable Rust toolchain. `rust-toolchain.toml` installs `r
 cargo test-host
 ```
 
-This tests the target-independent `control`, `plant`, and `supervisor` crates on the host.
-
 Equivalent command:
 
 ```bash
 cargo test --workspace --exclude rip-firmware-stm32f103
 ```
 
-## STM32F103 target
+This executes host tests for the portable Plant, Control, Supervisor, and target-independent Firmware crates.
+
+## Clippy
+
+```bash
+cargo clippy --workspace --exclude rip-firmware-stm32f103 --all-targets -- -D warnings
+```
+
+## STM32F103 release build
 
 ```bash
 cargo build-stm32f103
@@ -30,4 +36,6 @@ Equivalent command:
 cargo build -p rip-firmware-stm32f103 --release --target thumbv7m-none-eabi
 ```
 
-The STM32F103 firmware crate uses a 64 KiB FLASH / 20 KiB RAM linker memory definition and is the composition root for target-specific hardware integration.
+The STM32F103 executable lives under `firmware/targets/stm32f103/`. Its linker definition is 64 KiB FLASH / 20 KiB RAM.
+
+The release profile uses size optimization, LTO, one codegen unit, and `panic = "abort"`.

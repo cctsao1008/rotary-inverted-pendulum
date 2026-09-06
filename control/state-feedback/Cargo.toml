@@ -1,0 +1,11 @@
+[package]
+name = "rip-state-feedback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-robot-domain = { path = "../../plant/robot-domain" }
+
+[lib]
+path = "src/lib.rs"

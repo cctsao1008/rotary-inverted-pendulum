@@ -27,5 +27,5 @@ jobs:
         run: cargo test-host
       - name: Clippy
         run: cargo clippy --workspace --exclude rip-firmware-stm32f103 --all-targets -- -D warnings
-      - name: STM32F103 check
-        run: cargo check -p rip-firmware-stm32f103 --target thumbv7m-none-eabi
+      - name: STM32F103 release build
+        run: cargo build-stm32f103

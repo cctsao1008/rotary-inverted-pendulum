@@ -1,95 +1,88 @@
 # Control Architecture
 
-## Architectural boundaries
+## Canonical domains
 
-The software uses three primary boundaries rather than a traditional N-tier call stack.
+The system uses four architectural domains:
 
 ```text
-                    control
-                       ▲
-                       │
-                   supervisor
-                    ▲      ▲
-                    │      │
-                  plant    │
-                    ▲      │
-                    └──┬───┘
-                       │
-                    firmware
+                  CONTROL
+                     ▲
+                     │
+                 SUPERVISOR
+                  ▲      ▲
+                  │      │
+                PLANT    │
+                  ▲      │
+                  └──┬───┘
+                     │
+                 FIRMWARE
 ```
 
-Dependencies point toward the control core. Target-specific code must not define control-domain semantics.
+The arrows express ownership/dependency relationships, not runtime execution order.
 
-## Control Core
+## Plant
 
-`crates/control/` contains deterministic, target-independent control computation.
+`plant/` owns portable physical truth:
 
-It owns:
+- state and physical units;
+- raw observation semantics;
+- pendulum and encoder measurement physics;
+- physical generalized input semantics;
+- actuator capability/model constraints.
 
-- `ControlState` with state order `[theta, theta_dot, phi, phi_dot]`;
-- `BasicEstimator`;
-- control-state safety;
-- `ControlRegime` (`SwingUp`, `Capture`, `Balance`);
-- controller interfaces and LQR;
-- bounded normalized `ControlEffort`.
+The Rotary estimated state is `[theta, theta_dot, phi, phi_dot]`. The generalized control input is rotary-arm torque.
 
-The control core has no motor direction, PWM, GPIO, UART, interrupt, HAL, or MCU concepts.
+## Control
+
+`control/` owns desired closed-loop behavior.
 
 ```text
-EstimatorInput
-    ↓
-BasicEstimator
-    ↓
-ControlState
-    ↓
-Control Safety
+EstimatedState
     ↓
 Controller
     ↓
-ControlEffort
+GeneralizedDemand
 ```
 
-## Plant Components
+The current state-feedback controller is LQR with state order `[theta, theta_dot, phi, phi_dot]`. LQR produces rotary-arm torque demand and does not own output saturation, PWM, GPIO, H-bridge semantics, runtime authority, or sensor acquisition.
 
-`crates/plant/` owns physical conventions that are reusable across MCU targets:
+`SwingUp`, `Capture`, and `Balance` are Control-domain hybrid-control regimes.
 
-- pendulum ADC-to-angle conversion;
-- encoder count-to-continuous-angle conversion;
-- motor sign convention;
-- normalized effort-to-drive mapping.
+## Supervisor
 
-The resulting `DriveCommand` contains physical actuator semantics. These semantics do not enter the control core.
+`supervisor/` owns runtime belief, policy, health, and physical-output authority:
 
-## System Supervisor
+- `EstimatorMeasurement` input representation;
+- `BasicEstimator` and `EstimatedState` production;
+- sample freshness and runtime qualification;
+- timing health and watchdog state;
+- operating/runtime state;
+- `RuntimeAuthority`;
+- semantic promotion to `AuthorizedActuation`.
 
-`crates/supervisor/` owns operational policy and runtime composition above the pure control computation.
+## Firmware
 
-It owns:
+`firmware/` owns physical realization:
 
-- operational runtime state;
-- sensor observation ports;
-- observe-only control-cycle orchestration;
-- physical motor authority;
-- motor and telemetry ports.
+- sensor/target acquisition;
+- actuator electrical/protocol semantics;
+- physical-output interfaces;
+- board/assembly binding;
+- MCU-specific executable composition.
 
-Ports are consumer-owned: the supervisor defines the capabilities it requires; firmware adapters implement those capabilities.
+TB6612 direction/duty semantics are Firmware concerns. Concrete TIM3/GPIO realization belongs to the STM32F103 target backend.
 
-## Target Adapters
-
-`firmware/<target>/` owns target-specific integration such as startup, interrupt wiring, clocks, ADC, encoder timers, PWM, UART, DMA, GPIO, and board composition.
-
-Target adapters may depend on `supervisor`, `plant`, and `control`. The reverse dependency is not allowed.
-
-## Execution planes
-
-The runtime separates deterministic control work from background observability work.
+## Typed semantic boundaries
 
 ```text
-REAL-TIME CONTROL
-observation -> estimate -> safety -> control -> qualify -> authority -> motor
-
-BACKGROUND
-commands / telemetry / OLED / diagnostics
+RawObservation
+    != EstimatorMeasurement
+    != EstimatedState
+    != GeneralizedDemand
+    != BoundedActuatorCommand
+    != AuthorizedActuation
+    != Tb6612ElectricalActuation
+    != physical output
 ```
 
-Background work must be deferable and must not become a dependency of the control path.
+Each promotion has one owner. In particular, only Supervisor can create closed-loop `AuthorizedActuation`.
