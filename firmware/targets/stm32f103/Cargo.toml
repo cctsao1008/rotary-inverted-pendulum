@@ -12,6 +12,7 @@ panic-halt = "0.2"
 rip-actuator-model = { path = "../../../plant/actuator-model" }
 rip-control-runtime = { path = "../../../supervisor/control-runtime" }
 rip-estimator-input-adapter = { path = "../../adapters/estimator-input" }
+rip-hybrid-control = { path = "../../../control/hybrid-control" }
 rip-measurement-model = { path = "../../../plant/measurement-model" }
 rip-plant-observation = { path = "../../../plant/plant-observation" }
 rip-robot-domain = { path = "../../../plant/robot-domain" }
