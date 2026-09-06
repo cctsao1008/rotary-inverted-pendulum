@@ -298,11 +298,7 @@ mod tests {
 
     #[test]
     fn sink_owns_backend_and_applies_guarded_drive_and_safe_off() {
-        let io = Tb6612PwmDirIo::new(
-            MockPwm::default(),
-            MockPin::default(),
-            MockPin::default(),
-        );
+        let io = Tb6612PwmDirIo::new(MockPwm::default(), MockPin::default(), MockPin::default());
         let mut output = Tb6612Output::new(Tb6612Mapper::new(true), io);
 
         output.apply_closed_loop(authorized(-0.4)).unwrap();
@@ -318,11 +314,8 @@ mod tests {
 
     #[test]
     fn pwm_dir_backend_rejects_invalid_internal_frame_before_gpio_changes() {
-        let mut io = Tb6612PwmDirIo::new(
-            MockPwm::default(),
-            MockPin::default(),
-            MockPin::default(),
-        );
+        let mut io =
+            Tb6612PwmDirIo::new(MockPwm::default(), MockPin::default(), MockPin::default());
         let error = io
             .apply_frame(Tb6612ElectricalActuation {
                 mode: Tb6612BridgeMode::DrivePositive,
