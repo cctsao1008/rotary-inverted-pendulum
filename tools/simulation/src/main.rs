@@ -19,7 +19,6 @@ use rip_plant_observation::{
 use rip_robot_domain::{EstimatedState, TimestampUs, TorqueNm};
 use rip_runtime_state::{
     ControlWatchdog, RuntimeLimits, RuntimeState, SensorTimingLimits, SensorTimingMonitor,
-    WatchdogHealth,
 };
 use rip_state_estimator::EstimatorConfig;
 use rip_state_feedback::LqrController;
@@ -154,16 +153,21 @@ impl SyntheticSensors {
         Self {
             pendulum_upright_adc: i32::from(PENDULUM_UPRIGHT_ADC),
             pendulum_radians_per_count: PENDULUM_RADIANS_PER_COUNT,
-            pendulum_direction: f32::from(PENDULUM_DIRECTION),
+            pendulum_direction: PENDULUM_DIRECTION as f32,
             arm_radians_per_count: 2.0 * PI / ARM_ENCODER_COUNTS_PER_REVOLUTION,
-            arm_direction: f32::from(ARM_ENCODER_DIRECTION),
+            arm_direction: ARM_ENCODER_DIRECTION as f32,
         }
     }
 
-    fn observe(self, state: FurutaState, sample_index: u32, captured_at: TimestampUs) -> RawObservation {
+    fn observe(
+        self,
+        state: FurutaState,
+        sample_index: u32,
+        captured_at: TimestampUs,
+    ) -> RawObservation {
         let theta = wrap_pi(state.theta);
-        let pendulum_offset = (theta / (self.pendulum_radians_per_count * self.pendulum_direction))
-            .round() as i32;
+        let pendulum_offset =
+            (theta / (self.pendulum_radians_per_count * self.pendulum_direction)).round() as i32;
         let adc_raw = (self.pendulum_upright_adc + pendulum_offset).rem_euclid(4_096) as u16;
 
         let encoder_count =
@@ -287,7 +291,8 @@ fn run_simulation(config: SimulationConfig) -> Result<SimulationSummary, String>
     let mut watchdog = ControlWatchdog::new(CONTROL_WATCHDOG_TIMEOUT_US)
         .ok_or_else(|| "invalid watchdog timeout".to_owned())?;
 
-    let scheduled_ticks = (config.duration_s * 1_000_000.0 / CONTROL_PERIOD_US as f32).round() as u32;
+    let scheduled_ticks =
+        (config.duration_s * 1_000_000.0 / CONTROL_PERIOD_US as f32).round() as u32;
     let substeps = CONTROL_PERIOD_US / config.plant_step_us;
     let plant_dt_s = config.plant_step_us as f32 * 1.0e-6;
     let mut applied_torque = TorqueNm(0.0);
@@ -404,7 +409,9 @@ fn run_simulation(config: SimulationConfig) -> Result<SimulationSummary, String>
         summary.max_abs_torque_nm = summary.max_abs_torque_nm.max(applied_torque.0.abs());
         integrate_control_period(&mut plant, applied_torque, substeps, plant_dt_s)?;
         let true_state = plant.state();
-        summary.max_abs_theta_rad = summary.max_abs_theta_rad.max(wrap_pi(true_state.theta).abs());
+        summary.max_abs_theta_rad = summary
+            .max_abs_theta_rad
+            .max(wrap_pi(true_state.theta).abs());
         summary.max_abs_phi_rad = summary.max_abs_phi_rad.max(true_state.phi.abs());
         summary.final_state = true_state;
 
@@ -481,7 +488,14 @@ fn hybrid_controller() -> Result<HybridController, String> {
 fn print_csv_row(timestamp_us: u64, true_state: FurutaState, snapshot: CycleSnapshot) {
     let (est_theta, est_theta_dot, est_phi, est_phi_dot) = snapshot
         .estimate
-        .map(|state| (state.theta.0, state.theta_dot.0, state.phi.0, state.phi_dot.0))
+        .map(|state| {
+            (
+                state.theta.0,
+                state.theta_dot.0,
+                state.phi.0,
+                state.phi_dot.0,
+            )
+        })
         .unwrap_or((f32::NAN, f32::NAN, f32::NAN, f32::NAN));
     println!(
         "{:.6},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{:.7},{},{:.7},{:.7},{},{}",
@@ -558,7 +572,9 @@ where
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--scenario" => {
-                let value = args.next().ok_or_else(|| "missing --scenario value".to_owned())?;
+                let value = args
+                    .next()
+                    .ok_or_else(|| "missing --scenario value".to_owned())?;
                 config.scenario = Scenario::parse(&value)
                     .ok_or_else(|| "--scenario must be swingup or balance".to_owned())?;
             }
@@ -592,7 +608,8 @@ where
     I: Iterator<Item = String>,
 {
     let raw = args.next().ok_or_else(|| format!("missing {name} value"))?;
-    raw.parse().map_err(|_| format!("invalid {name} value: {raw}"))
+    raw.parse()
+        .map_err(|_| format!("invalid {name} value: {raw}"))
 }
 
 fn print_help() {
