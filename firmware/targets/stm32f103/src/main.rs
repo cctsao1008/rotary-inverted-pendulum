@@ -7,13 +7,22 @@ use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use cortex_m_rt::entry;
 use panic_halt as _;
+use rip_actuator_model::{ArmActuatorModel, ArmActuatorParameters};
+use rip_control_runtime::{
+    ControlCycle, ControlRuntime, RuntimeObservation, RuntimeObservationSource,
+};
 use rip_estimator_input_adapter::{EncoderCounterAccumulator, EstimatorInputAdapter};
 use rip_measurement_model::{EncoderScale, PendulumCalibration};
 use rip_plant_observation::{
     MeasurementQuality, RawArmEncoderObservation, RawObservation, RawPendulumObservation,
 };
 use rip_robot_domain::{EstimatedState, TimestampUs};
-use rip_state_estimator::{BasicEstimator, Estimate, EstimatorConfig};
+use rip_runtime_state::{
+    ControlWatchdog, RuntimeLimits, SensorTimingHealth, SensorTimingLimits, SensorTimingMonitor,
+    WatchdogHealth,
+};
+use rip_state_estimator::EstimatorConfig;
+use rip_state_feedback::LqrController;
 use stm32f1xx_hal::{
     adc, pac,
     prelude::*,
@@ -30,8 +39,35 @@ const ARM_ENCODER_DIRECTION: i8 = 1;
 const ESTIMATOR_MAX_GAP_US: u64 = 20_000;
 const ESTIMATOR_RATE_FILTER_ALPHA: f32 = 1.0;
 
-/// Debugger-visible observe-only snapshot. No actuator backend is linked into
-/// this target, so these values cannot grant physical-output authority.
+const SENSOR_EXPECTED_PERIOD_US: u64 = 1_000;
+const SENSOR_LATE_AFTER_US: u64 = 5_000;
+const SENSOR_TIMEOUT_AFTER_US: u64 = 20_000;
+const CONTROL_WATCHDOG_TIMEOUT_US: u64 = 20_000;
+
+// Reference-backed live-shadow controller parameters derived from the QNET RIP
+// model in Abdullah et al. (2021). Their voltage-domain LQR gains and motor
+// constants are converted to equivalent rotary-arm torque-feedback gains in
+// this project's state order [theta, theta_dot, phi, phi_dot]. These values are
+// not Forest D1 calibration and cannot justify physical-output authority.
+const SHADOW_LQR_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, 0.011_20, 0.007_66];
+
+// QNET reference nominal: Kt/Rm = 0.005 Nm/V and the reported LQR control
+// saturation is +/-10 V, giving a zero-speed static torque span of 0.05 Nm.
+// The actuator model is used only for non-actuating live-shadow computation.
+const SHADOW_ACTUATOR_TORQUE_PER_EFFECTIVE_COMMAND_NM: f32 = 0.05;
+const SHADOW_ACTUATOR_COMMAND_DEADZONE: f32 = 0.0;
+
+const CYCLE_IDLE: u32 = 0;
+const CYCLE_PRIMED: u32 = 1;
+const CYCLE_REJECTED: u32 = 2;
+const CYCLE_COMPUTED: u32 = 3;
+const CYCLE_ERROR: u32 = 4;
+
+/// Debugger-visible live-shadow snapshot.
+///
+/// This target links no ActuationSink, TB6612 electrical mapper, TIM3 motor
+/// PWM, or motor-direction GPIO. Control, actuator-model, and authority
+/// computation therefore terminate in debugger-visible data only.
 static SHADOW_SAMPLE_INDEX: AtomicU32 = AtomicU32::new(0);
 static SHADOW_TIMESTAMP_US_LOW: AtomicU32 = AtomicU32::new(0);
 static SHADOW_PENDULUM_ADC: AtomicU32 = AtomicU32::new(0);
@@ -40,6 +76,38 @@ static SHADOW_THETA_MRAD: AtomicI32 = AtomicI32::new(0);
 static SHADOW_THETA_DOT_MRAD_S: AtomicI32 = AtomicI32::new(0);
 static SHADOW_PHI_MRAD: AtomicI32 = AtomicI32::new(0);
 static SHADOW_PHI_DOT_MRAD_S: AtomicI32 = AtomicI32::new(0);
+static SHADOW_CYCLE: AtomicU32 = AtomicU32::new(CYCLE_IDLE);
+static SHADOW_DEMAND_TORQUE_UNM: AtomicI32 = AtomicI32::new(0);
+static SHADOW_BOUNDED_COMMAND_PPM: AtomicI32 = AtomicI32::new(0);
+static SHADOW_PREDICTED_TORQUE_UNM: AtomicI32 = AtomicI32::new(0);
+static SHADOW_ACTUATOR_SATURATED: AtomicU32 = AtomicU32::new(0);
+static SHADOW_QUALIFICATION_REASONS: AtomicU32 = AtomicU32::new(0);
+static SHADOW_AUTHORITY_REASONS: AtomicU32 = AtomicU32::new(0);
+static SHADOW_AUTHORIZED: AtomicU32 = AtomicU32::new(0);
+static SHADOW_SENSOR_TIMING_HEALTH: AtomicU32 = AtomicU32::new(0);
+static SHADOW_WATCHDOG_HEALTH: AtomicU32 = AtomicU32::new(0);
+
+struct PendingObservationSource {
+    pending: Option<RuntimeObservation>,
+}
+
+impl PendingObservationSource {
+    const fn new() -> Self {
+        Self { pending: None }
+    }
+
+    fn submit(&mut self, observation: RuntimeObservation) {
+        self.pending = Some(observation);
+    }
+}
+
+impl RuntimeObservationSource for PendingObservationSource {
+    type Error = ();
+
+    fn observe(&mut self) -> Result<RuntimeObservation, Self::Error> {
+        self.pending.take().ok_or(())
+    }
+}
 
 struct MicrosecondTimebase {
     timer: MonoTimer,
@@ -108,11 +176,40 @@ fn main() -> ! {
         EncoderScale::new(ARM_ENCODER_COUNTS_PER_REVOLUTION, ARM_ENCODER_DIRECTION).unwrap();
     let adapter = EstimatorInputAdapter::new(pendulum_calibration, encoder_scale);
     let mut encoder_accumulator = EncoderCounterAccumulator::new(qei.count());
-    let mut estimator = BasicEstimator::new();
+
     let estimator_config = EstimatorConfig {
         max_gap_us: ESTIMATOR_MAX_GAP_US,
         rate_filter_alpha: ESTIMATOR_RATE_FILTER_ALPHA,
     };
+    let controller = LqrController::new(SHADOW_LQR_TORQUE_GAINS).unwrap();
+    let actuator_model = ArmActuatorModel::new(
+        ArmActuatorParameters::new(
+            SHADOW_ACTUATOR_TORQUE_PER_EFFECTIVE_COMMAND_NM,
+            SHADOW_ACTUATOR_COMMAND_DEADZONE,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut runtime = ControlRuntime::new(
+        PendingObservationSource::new(),
+        estimator_config,
+        RuntimeLimits::observe_only(),
+        controller,
+        actuator_model,
+    );
+
+    // RuntimeAuthority remains disarmed and RuntimeState remains Ready. The
+    // authority decision is evaluated on every computed cycle, but an
+    // AuthorizedActuation token cannot be produced in this target state.
+    let timing_limits = SensorTimingLimits::new(
+        SENSOR_EXPECTED_PERIOD_US,
+        SENSOR_LATE_AFTER_US,
+        SENSOR_TIMEOUT_AFTER_US,
+    )
+    .unwrap();
+    let mut timing_monitor = SensorTimingMonitor::new(timing_limits, 0);
+    let mut watchdog = ControlWatchdog::new(CONTROL_WATCHDOG_TIMEOUT_US).unwrap();
+
     let quality = MeasurementQuality::AVAILABLE
         | MeasurementQuality::IO_OK
         | MeasurementQuality::TIMING_VALID;
@@ -145,9 +242,25 @@ fn main() -> ! {
         sample_index = sample_index.wrapping_add(1);
         publish_raw(raw);
 
+        let timing = timing_monitor.on_event(captured_at.0);
+        let watchdog_health = watchdog.health(captured_at.0);
+        publish_runtime_health(timing, watchdog_health);
+
         if let Ok(measurement) = adapter.measurement(raw) {
-            if let Ok(Estimate::Ready(state)) = estimator.step(estimator_config, measurement) {
-                publish_state(state);
+            runtime.source_mut().submit(RuntimeObservation {
+                measurement,
+                sensor_valid: true,
+                sample_age_us: 0,
+                timing,
+                watchdog: watchdog_health,
+            });
+
+            match runtime.step() {
+                Ok(cycle) => {
+                    publish_cycle(cycle);
+                    watchdog.kick(captured_at.0);
+                }
+                Err(_) => publish_cycle_error(),
             }
         }
 
@@ -162,6 +275,59 @@ fn publish_raw(raw: RawObservation) {
     SHADOW_ARM_ENCODER_COUNT.store(raw.arm_encoder.accumulated_count, Ordering::Relaxed);
 }
 
+fn publish_cycle(cycle: ControlCycle) {
+    match cycle {
+        ControlCycle::Primed => {
+            SHADOW_CYCLE.store(CYCLE_PRIMED, Ordering::Relaxed);
+            SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
+            clear_computed_snapshot();
+        }
+        ControlCycle::Rejected { qualification } => {
+            SHADOW_CYCLE.store(CYCLE_REJECTED, Ordering::Relaxed);
+            SHADOW_QUALIFICATION_REASONS
+                .store(qualification.reasons.bits() as u32, Ordering::Relaxed);
+            clear_computed_snapshot();
+        }
+        ControlCycle::Computed {
+            state,
+            demand,
+            bounded_command,
+            authority,
+            authorized,
+        } => {
+            SHADOW_CYCLE.store(CYCLE_COMPUTED, Ordering::Relaxed);
+            SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
+            publish_state(state);
+            SHADOW_DEMAND_TORQUE_UNM.store(scale_micro(demand.arm_torque.0), Ordering::Relaxed);
+            SHADOW_BOUNDED_COMMAND_PPM
+                .store(scale_micro(bounded_command.command.get()), Ordering::Relaxed);
+            SHADOW_PREDICTED_TORQUE_UNM.store(
+                scale_micro(bounded_command.predicted_arm_torque.0),
+                Ordering::Relaxed,
+            );
+            SHADOW_ACTUATOR_SATURATED
+                .store(bounded_command.saturated as u32, Ordering::Relaxed);
+            SHADOW_AUTHORITY_REASONS.store(authority.reasons.bits() as u32, Ordering::Relaxed);
+            SHADOW_AUTHORIZED.store(authorized.is_some() as u32, Ordering::Relaxed);
+        }
+    }
+}
+
+fn publish_cycle_error() {
+    SHADOW_CYCLE.store(CYCLE_ERROR, Ordering::Relaxed);
+    SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
+    clear_computed_snapshot();
+}
+
+fn clear_computed_snapshot() {
+    SHADOW_DEMAND_TORQUE_UNM.store(0, Ordering::Relaxed);
+    SHADOW_BOUNDED_COMMAND_PPM.store(0, Ordering::Relaxed);
+    SHADOW_PREDICTED_TORQUE_UNM.store(0, Ordering::Relaxed);
+    SHADOW_ACTUATOR_SATURATED.store(0, Ordering::Relaxed);
+    SHADOW_AUTHORITY_REASONS.store(0, Ordering::Relaxed);
+    SHADOW_AUTHORIZED.store(0, Ordering::Relaxed);
+}
+
 fn publish_state(state: EstimatedState) {
     SHADOW_THETA_MRAD.store(scale_milli(state.theta.0), Ordering::Relaxed);
     SHADOW_THETA_DOT_MRAD_S.store(scale_milli(state.theta_dot.0), Ordering::Relaxed);
@@ -169,8 +335,38 @@ fn publish_state(state: EstimatedState) {
     SHADOW_PHI_DOT_MRAD_S.store(scale_milli(state.phi_dot.0), Ordering::Relaxed);
 }
 
+fn publish_runtime_health(timing: SensorTimingHealth, watchdog: WatchdogHealth) {
+    SHADOW_SENSOR_TIMING_HEALTH.store(sensor_timing_code(timing), Ordering::Relaxed);
+    SHADOW_WATCHDOG_HEALTH.store(watchdog_code(watchdog), Ordering::Relaxed);
+}
+
+const fn sensor_timing_code(health: SensorTimingHealth) -> u32 {
+    match health {
+        SensorTimingHealth::Startup => 0,
+        SensorTimingHealth::Healthy => 1,
+        SensorTimingHealth::Late => 2,
+        SensorTimingHealth::Timeout => 3,
+    }
+}
+
+const fn watchdog_code(health: WatchdogHealth) -> u32 {
+    match health {
+        WatchdogHealth::Disarmed => 0,
+        WatchdogHealth::Healthy => 1,
+        WatchdogHealth::Expired => 2,
+    }
+}
+
 fn scale_milli(value: f32) -> i32 {
-    let scaled = value * 1_000.0;
+    scale(value, 1_000.0)
+}
+
+fn scale_micro(value: f32) -> i32 {
+    scale(value, 1_000_000.0)
+}
+
+fn scale(value: f32, factor: f32) -> i32 {
+    let scaled = value * factor;
     if scaled >= i32::MAX as f32 {
         i32::MAX
     } else if scaled <= i32::MIN as f32 {
