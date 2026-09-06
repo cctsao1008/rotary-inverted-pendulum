@@ -160,7 +160,7 @@ fn derivative_for(
     let sin_theta = sinf(state.theta);
     let coupling = c * cos_theta;
     let determinant = a * b - coupling * coupling;
-    if !determinant.is_finite() || determinant <= f32::EPSILON {
+    if !determinant.is_finite() || determinant <= 0.0 {
         return Err(DynamicsError::SingularMassMatrix);
     }
 
