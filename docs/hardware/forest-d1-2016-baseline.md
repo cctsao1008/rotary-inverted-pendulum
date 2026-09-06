@@ -47,8 +47,10 @@ The firmware samples its wiper through PA7 / ADC1_IN7.
 
 The firmware uses TIM2 quadrature encoder mode and uses **1040 counts per geared output-shaft revolution** as the encoder reference.
 
-D2 is the default maintenance motor channel.
+TB6612 logic VCC is supplied at 5 V. STBY is tied high on the baseboard, so a future motor-output backend must implement safe-off through PWM and direction state rather than an MCU-controlled STBY line.
 
-TB6612 logic VCC is supplied at 5 V. STBY is tied high on the baseboard, so firmware safe-off is implemented through PWM and direction state rather than an MCU-controlled STBY line.
+## Current STM32F103 sensing composition
 
-The maintenance motor service is independent of automatic control. The automatic-control motor sink is unbound.
+The STM32F103 target configures the 8 MHz HSE to a 72 MHz system clock, samples the pendulum sensor through PA7 / ADC1, reads the arm encoder through PA0/PA1 / TIM2 quadrature mode, and derives monotonic microsecond timestamp evidence from the Cortex-M3 DWT cycle counter.
+
+The target converts those observations through the Firmware estimator-input adapter and Supervisor `BasicEstimator`, publishing an observe-only debugger snapshot of raw ADC, accumulated encoder count, and estimated state. It does not instantiate TIM3 motor PWM, motor direction GPIO, `ActuationSink`, or any closed-loop physical-output path.

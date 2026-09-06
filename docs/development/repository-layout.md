@@ -25,6 +25,7 @@ supervisor/
 firmware/
 ├── interfaces/actuation/
 ├── actuators/tb6612/
+├── adapters/estimator-input/
 └── targets/stm32f103/
 
 docs/
@@ -51,5 +52,7 @@ Control  Supervisor
 ```
 
 Control consumes Plant semantics. Supervisor composes Plant and Control behavior while owning estimation and authority. Firmware depends on the portable domains and owns physical realization.
+
+`firmware/adapters/estimator-input` converts Plant-owned raw ADC/encoder evidence into the Supervisor estimator input representation. `firmware/targets/stm32f103` currently instantiates only the sensing side of the runtime and does not link an actuator sink.
 
 The previous C implementation and superseded Rust layout are retained in Git history rather than in the active source tree.

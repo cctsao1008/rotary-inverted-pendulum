@@ -1,0 +1,13 @@
+[package]
+name = "rip-estimator-input-adapter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+rip-measurement-model = { path = "../../../plant/measurement-model" }
+rip-plant-observation = { path = "../../../plant/plant-observation" }
+rip-state-estimator = { path = "../../../supervisor/state-estimator" }

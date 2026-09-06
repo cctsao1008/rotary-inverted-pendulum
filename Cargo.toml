@@ -11,6 +11,7 @@ members = [
     "supervisor/control-runtime",
     "firmware/interfaces/actuation",
     "firmware/actuators/tb6612",
+    "firmware/adapters/estimator-input",
     "firmware/targets/stm32f103",
 ]
 default-members = [
@@ -25,6 +26,7 @@ default-members = [
     "supervisor/control-runtime",
     "firmware/interfaces/actuation",
     "firmware/actuators/tb6612",
+    "firmware/adapters/estimator-input",
 ]
 resolver = "2"
 

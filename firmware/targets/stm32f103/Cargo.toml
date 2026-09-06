@@ -9,6 +9,9 @@ build = "build.rs"
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 panic-halt = "0.2"
-rip-actuation-interface = { path = "../../interfaces/actuation" }
-rip-control-runtime = { path = "../../../supervisor/control-runtime" }
-rip-tb6612-actuation = { path = "../../actuators/tb6612" }
+rip-estimator-input-adapter = { path = "../../adapters/estimator-input" }
+rip-measurement-model = { path = "../../../plant/measurement-model" }
+rip-plant-observation = { path = "../../../plant/plant-observation" }
+rip-robot-domain = { path = "../../../plant/robot-domain" }
+rip-state-estimator = { path = "../../../supervisor/state-estimator" }
+stm32f1xx-hal = { version = "0.11.0", features = ["stm32f103", "medium"] }
