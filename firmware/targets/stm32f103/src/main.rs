@@ -2,6 +2,8 @@
 #![no_main]
 #![deny(unsafe_code)]
 
+mod timing_characterization;
+
 use core::f32::consts::PI;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
@@ -35,6 +37,7 @@ use stm32f1xx_hal::{
     timer::{pwm_input::QeiOptions, Tim3NoRemap, Timer},
     watchdog::IndependentWatchdog,
 };
+use timing_characterization::RuntimeTimingCharacterizer;
 
 const PENDULUM_UPRIGHT_ADC: u16 = 2_928;
 const PENDULUM_RADIANS_PER_COUNT: f32 = 2.0 * PI / 4_096.0;
@@ -165,6 +168,14 @@ impl MicrosecondTimebase {
         self.remainder_ticks = (total_ticks % ticks_per_us) as u32;
         TimestampUs(self.elapsed_us)
     }
+
+    fn mark(&self) -> Instant {
+        self.timer.now()
+    }
+
+    const fn ticks_per_us(&self) -> u32 {
+        self.ticks_per_us
+    }
 }
 
 #[entry]
@@ -212,6 +223,8 @@ fn main() -> ! {
 
     let monotonic = MonoTimer::new(cp.DWT, cp.DCB, &rcc.clocks);
     let mut timebase = MicrosecondTimebase::new(monotonic);
+    let mut timing_characterizer =
+        RuntimeTimingCharacterizer::new(SENSOR_EXPECTED_PERIOD_US as u32);
 
     // IWDG is independent of TIM1/DWT. A stalled firmware loop therefore resets
     // the MCU, after which D2 is re-established in the hard-safe-off boot state.
@@ -298,11 +311,26 @@ fn main() -> ! {
         // Exactly one fresh acquisition/control opportunity is admitted per
         // observed TIM1 update flag. Missed periods are never replayed.
         while control_tick.wait().is_err() {}
-        hardware_watchdog.feed();
+
+        // Characterization starts immediately after admission. TIM1 CNT gives
+        // phase from the most recent update edge; DWT measures the full critical
+        // path independently of the scheduler timer.
+        let cycle_started = timebase.mark();
+        let tick_phase_us = control_tick.now().ticks();
+        let admitted_at = timebase.now();
+        timing_characterizer.observe_admission(admitted_at.0, tick_phase_us);
 
         let adc_raw: u16 = match adc1.read(&mut pendulum_pin) {
             Ok(value) => value,
-            Err(_) => continue,
+            Err(_) => {
+                timing_characterizer.record_adc_error();
+                timing_characterizer.finish_cycle(
+                    cycle_started.elapsed(),
+                    timebase.ticks_per_us(),
+                );
+                hardware_watchdog.feed();
+                continue;
+            }
         };
         let accumulated_count = encoder_accumulator.update(qei.count());
         let captured_at = timebase.now();
@@ -324,6 +352,7 @@ fn main() -> ! {
         publish_raw(raw);
 
         let timing = timing_monitor.on_event(captured_at.0);
+        timing_characterizer.observe_supervisor_health(timing);
         let watchdog_health = watchdog.health(captured_at.0);
         publish_runtime_health(timing, watchdog_health);
 
@@ -342,9 +371,15 @@ fn main() -> ! {
                     publish_regime(runtime.controller().regime());
                     watchdog.kick(captured_at.0);
                 }
-                Err(_) => publish_cycle_error(),
+                Err(_) => {
+                    timing_characterizer.record_runtime_error();
+                    publish_cycle_error();
+                }
             }
         }
+
+        timing_characterizer.finish_cycle(cycle_started.elapsed(), timebase.ticks_per_us());
+        hardware_watchdog.feed();
     }
 }
 
