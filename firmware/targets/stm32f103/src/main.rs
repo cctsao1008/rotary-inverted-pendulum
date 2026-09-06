@@ -15,8 +15,7 @@ use rip_plant_observation::{
 use rip_robot_domain::{EstimatedState, TimestampUs};
 use rip_state_estimator::{BasicEstimator, Estimate, EstimatorConfig};
 use stm32f1xx_hal::{
-    adc,
-    pac,
+    adc, pac,
     prelude::*,
     rcc,
     time::{Instant, MonoTimer},
@@ -93,10 +92,7 @@ fn main() -> ! {
     let mut pendulum_pin = gpioa.pa7.into_analog(&mut gpioa.crl);
 
     let mut adc1 = adc::Adc::new(dp.ADC1, &mut rcc);
-    let qei = Timer::new(dp.TIM2, &mut rcc).qei(
-        (gpioa.pa0, gpioa.pa1),
-        QeiOptions::default(),
-    );
+    let qei = Timer::new(dp.TIM2, &mut rcc).qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
 
     let monotonic = MonoTimer::new(cp.DWT, cp.DCB, &rcc.clocks);
     let mut timebase = MicrosecondTimebase::new(monotonic);
@@ -108,11 +104,8 @@ fn main() -> ! {
         PENDULUM_DIRECTION,
     )
     .unwrap();
-    let encoder_scale = EncoderScale::new(
-        ARM_ENCODER_COUNTS_PER_REVOLUTION,
-        ARM_ENCODER_DIRECTION,
-    )
-    .unwrap();
+    let encoder_scale =
+        EncoderScale::new(ARM_ENCODER_COUNTS_PER_REVOLUTION, ARM_ENCODER_DIRECTION).unwrap();
     let adapter = EstimatorInputAdapter::new(pendulum_calibration, encoder_scale);
     let mut encoder_accumulator = EncoderCounterAccumulator::new(qei.count());
     let mut estimator = BasicEstimator::new();

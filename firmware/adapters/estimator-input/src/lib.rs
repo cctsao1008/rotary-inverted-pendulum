@@ -95,9 +95,7 @@ mod tests {
     use rip_robot_domain::TimestampUs;
 
     fn good_quality() -> MeasurementQuality {
-        MeasurementQuality::AVAILABLE
-            | MeasurementQuality::IO_OK
-            | MeasurementQuality::TIMING_VALID
+        MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK | MeasurementQuality::TIMING_VALID
     }
 
     #[test]
