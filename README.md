@@ -79,6 +79,18 @@ The legacy Forest D1 / Forest S1 names are used only for original hardware and d
 
 See [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
 
+## Reference-backed nominal parameters
+
+Physical and model parameters may use **reference-backed nominal values** when a project-specific value is not part of the implemented system definition.
+
+Preferred references are:
+
+1. component datasheets and vendor hardware documentation;
+2. published papers, theses, and technical reports for comparable rotary/Furuta pendulums;
+3. documented public implementations and experimental datasets with sufficiently similar mechanics, sensing, actuation, or motor characteristics.
+
+A reference-backed nominal parameter carries a value, unit, source, and applicability. **Nominal** means a representative engineering value; it is not a claim of specimen-specific calibration.
+
 ## Repository ownership
 
 ```text
@@ -103,7 +115,8 @@ Markdown describes only the resulting system:
 
 - architecture;
 - interfaces and contracts;
-- implemented behavior and reference usage.
+- implemented behavior and reference usage;
+- selected reference-backed nominal parameters.
 
 Validation evidence, open questions, unknowns, history, roadmaps, checklists, and next actions belong outside Markdown.
 

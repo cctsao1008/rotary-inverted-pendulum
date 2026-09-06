@@ -22,6 +22,18 @@ The maintenance motor arm window is **30 seconds**. Ordinary `motor test` accept
 
 The pendulum conversion wraps the raw ADC delta before scaling to the circular angle domain.
 
+## Reference-backed nominal parameters
+
+Physical-plant and model parameters may be represented by reference-backed nominal values.
+
+Accepted reference classes are:
+
+- component datasheets and vendor hardware documentation;
+- published rotary/Furuta-pendulum papers, theses, and technical reports;
+- documented public implementations and experimental datasets for sufficiently comparable systems.
+
+Each nominal parameter is defined by its value, unit, source, and applicability. A nominal value is a design/reference value rather than a specimen-specific calibrated measurement.
+
 ## Physical authority
 
 Text motor commands are maintenance operations. They do not grant automatic closed-loop controller authority.
