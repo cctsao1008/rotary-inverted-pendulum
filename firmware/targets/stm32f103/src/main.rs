@@ -86,9 +86,10 @@ const CYCLE_ERROR: u32 = 4;
 
 /// Debugger-visible live-shadow snapshot.
 ///
-/// This target links no ActuationSink, TIM3 motor PWM, or motor-direction GPIO.
-/// Sensing, estimation, hybrid control, actuator-model, and authority computation
-/// therefore terminate in debugger-visible data only.
+/// The concrete STM32 motor channel is configured into hard safe-off at boot:
+/// PB1/TIM3_CH4 duty=0 and PB13/PB12 low. No ActuationSink is connected to
+/// those peripherals, so sensing, estimation, hybrid control, actuator-model,
+/// and authority computation terminate in debugger-visible data only.
 static SHADOW_SAMPLE_INDEX: AtomicU32 = AtomicU32::new(0);
 static SHADOW_TIMESTAMP_US_LOW: AtomicU32 = AtomicU32::new(0);
 static SHADOW_PENDULUM_ADC: AtomicU32 = AtomicU32::new(0);
@@ -179,10 +180,23 @@ fn main() -> ! {
     );
 
     let mut gpioa = dp.GPIOA.split(&mut rcc);
+    let mut gpiob = dp.GPIOB.split(&mut rcc);
     let mut pendulum_pin = gpioa.pa7.into_analog(&mut gpioa.crl);
 
     let mut adc1 = adc::Adc::new(dp.ADC1, &mut rcc);
     let qei = Timer::new(dp.TIM2, &mut rcc).qei((gpioa.pa0, gpioa.pa1), QeiOptions::default());
+
+    // D2 is the installed rotary-arm motor channel. Bind the concrete pins now,
+    // but expose no runtime actuation object: hard safe-off is the only physical
+    // state reachable from this executable.
+    let mut motor_in1 = gpiob.pb13.into_push_pull_output(&mut gpiob.crh);
+    let mut motor_in2 = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
+    motor_in1.set_low();
+    motor_in2.set_low();
+    let (_motor_pwm_manager, (.., motor_pwm_channel)) = dp.TIM3.pwm_hz(20.kHz(), &mut rcc);
+    let mut motor_pwm = motor_pwm_channel.with(gpiob.pb1);
+    motor_pwm.set_duty(0);
+    motor_pwm.enable();
 
     let monotonic = MonoTimer::new(cp.DWT, cp.DCB, &rcc.clocks);
     let mut timebase = MicrosecondTimebase::new(monotonic);
