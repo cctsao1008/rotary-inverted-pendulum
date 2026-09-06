@@ -49,7 +49,35 @@ STM32F103 PWM / GPIO physical output
 
 `RawObservation` is Plant-owned observation semantics populated by Firmware. `EstimatorMeasurement` is a Supervisor-owned estimator input representation that preserves Plant measurement semantics. State estimation belongs to Supervisor.
 
-The current STM32F103 executable materializes the sensing side through `EstimatedState`: PA7 / ADC1 acquires pendulum position, PA0/PA1 / TIM2 acquires the rotary-arm quadrature counter, the DWT cycle counter provides monotonic timestamp evidence, and `firmware/adapters/estimator-input` performs semantic promotion. The target does not link an actuator sink or motor-output backend.
+The STM32F103 executable currently materializes a **non-actuating live-shadow prefix** through the authority decision:
+
+```text
+PA7 / ADC1 + PA0/PA1 / TIM2 + DWT timestamp
+    ↓
+RawObservation
+    ↓
+EstimatorInputAdapter
+    ↓
+EstimatorMeasurement
+    ↓
+BasicEstimator
+    ↓
+EstimatedState
+    ↓
+LqrController
+    ↓
+GeneralizedDemand
+    ↓
+ArmActuatorModel
+    ↓
+BoundedActuatorCommand
+    ↓
+RuntimeAuthority::evaluate
+    ↓
+AuthorityDecision + debugger-visible shadow data
+```
+
+`RuntimeAuthority` remains disarmed and the runtime remains `Ready`, so this target does not produce closed-loop `AuthorizedActuation`. It also does not link an `ActuationSink`, TB6612 electrical mapper, TIM3 motor PWM, or motor-direction GPIO backend.
 
 ## Rotary plant semantics
 
@@ -86,6 +114,8 @@ Active(ControlRegime)        Balance
 Fault(reason)
 ```
 
+`Ready` may execute non-actuating live-shadow computation. Closed-loop physical authorization still requires `RuntimeState::Active(...)` plus the other Supervisor authority conditions.
+
 ## Physical-output authority
 
 Closed-loop physical output requires semantic promotion by Supervisor:
@@ -101,6 +131,20 @@ Firmware ActuationSink
 ```
 
 `AuthorizedActuation` has no public constructor. Maintenance output uses a distinct `MaintenanceActuation` proof type and a mutually exclusive Supervisor-owned maintenance authority mode.
+
+## Reference-backed nominal live-shadow parameters
+
+The STM32F103 live-shadow controller currently uses a QNET rotary-inverted-pendulum reference model from Abdullah et al. (2021), not Forest D1 specimen calibration.
+
+The published voltage-domain LQR gain vector and DC-motor constants are converted to the project state order and rotary-arm torque output:
+
+```text
+project state order: [theta, theta_dot, phi, phi_dot]
+nominal torque-feedback gains:
+[0.18355, 0.01585, 0.01120, 0.00766]
+```
+
+Using the reference values `Kt = 0.042 N·m/A`, `Rm = 8.4 Ω`, and the reported ±10 V LQR control saturation gives a zero-speed static nominal torque span of `0.05 N·m` for the shadow actuator model. These parameters define only the current reference-backed computation path; they do not grant or justify Forest D1 physical-output authority.
 
 ## Source ownership
 
@@ -124,7 +168,7 @@ firmware/
 ├── interfaces/actuation/    Authorized physical-output contract
 ├── actuators/tb6612/        TB6612 electrical semantics
 ├── adapters/estimator-input/ Raw observation -> estimator input promotion
-└── targets/stm32f103/       STM32F103 sensing executable composition
+└── targets/stm32f103/       STM32F103 sensing + live-shadow composition
 ```
 
 The previous C implementation and superseded Rust architecture are retained in Git history rather than in the active tree.
