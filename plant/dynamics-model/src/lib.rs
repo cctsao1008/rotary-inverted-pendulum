@@ -124,19 +124,13 @@ impl FurutaPlant {
         let sixth = dt_s / 6.0;
         self.state = FurutaState {
             theta: s0.theta
-                + sixth
-                    * (k1.theta_dot + 2.0 * k2.theta_dot + 2.0 * k3.theta_dot + k4.theta_dot),
+                + sixth * (k1.theta_dot + 2.0 * k2.theta_dot + 2.0 * k3.theta_dot + k4.theta_dot),
             theta_dot: s0.theta_dot
                 + sixth
-                    * (k1.theta_ddot
-                        + 2.0 * k2.theta_ddot
-                        + 2.0 * k3.theta_ddot
-                        + k4.theta_ddot),
-            phi: s0.phi
-                + sixth * (k1.phi_dot + 2.0 * k2.phi_dot + 2.0 * k3.phi_dot + k4.phi_dot),
+                    * (k1.theta_ddot + 2.0 * k2.theta_ddot + 2.0 * k3.theta_ddot + k4.theta_ddot),
+            phi: s0.phi + sixth * (k1.phi_dot + 2.0 * k2.phi_dot + 2.0 * k3.phi_dot + k4.phi_dot),
             phi_dot: s0.phi_dot
-                + sixth
-                    * (k1.phi_ddot + 2.0 * k2.phi_ddot + 2.0 * k3.phi_ddot + k4.phi_ddot),
+                + sixth * (k1.phi_ddot + 2.0 * k2.phi_ddot + 2.0 * k3.phi_ddot + k4.phi_ddot),
         };
 
         if !self.state.is_finite() {
