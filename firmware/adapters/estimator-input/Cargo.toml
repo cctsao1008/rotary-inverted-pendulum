@@ -11,3 +11,6 @@ path = "src/lib.rs"
 rip-measurement-model = { path = "../../../plant/measurement-model" }
 rip-plant-observation = { path = "../../../plant/plant-observation" }
 rip-state-estimator = { path = "../../../supervisor/state-estimator" }
+
+[dev-dependencies]
+rip-robot-domain = { path = "../../../plant/robot-domain" }
