@@ -143,12 +143,8 @@ where
             Tb6612BridgeMode::Brake => (true, true, 0.0),
         };
 
-        self.in1
-            .set_level(in1)
-            .map_err(Tb6612OutputError::In1)?;
-        self.in2
-            .set_level(in2)
-            .map_err(Tb6612OutputError::In2)?;
+        self.in1.set_level(in1).map_err(Tb6612OutputError::In1)?;
+        self.in2.set_level(in2).map_err(Tb6612OutputError::In2)?;
         self.pwm
             .set_duty_fraction(duty)
             .map_err(Tb6612OutputError::Pwm)?;
