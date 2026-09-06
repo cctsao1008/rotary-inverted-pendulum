@@ -42,7 +42,11 @@ BoundedActuatorCommand
     ↓
 AuthorizedActuation
     ↓
+Firmware ActuationSink
+    ↓
 Tb6612ElectricalActuation
+    ↓
+Tb6612FrameIo
     ↓
 STM32F103 PWM / GPIO physical output
 ```
@@ -52,6 +56,8 @@ STM32F103 PWM / GPIO physical output
 The STM32F103 executable materializes the non-actuating computation path through the authority decision:
 
 ```text
+TIM1 / 1 kHz control opportunity
+    ↓
 PA7 / ADC1 + PA0/PA1 / TIM2 + DWT timestamp
     ↓
 RawObservation
@@ -80,9 +86,13 @@ RuntimeAuthority::evaluate
 AuthorityDecision + debugger-visible shadow data
 ```
 
+TIM1 provides a fixed 1 kHz control opportunity. The hardware update flag is not treated as a backlog queue: one observed update admits at most one fresh acquisition/control cycle, and missed periods are not replayed. DWT/`MonoTimer` remains the independent monotonic timing source used for timing evidence.
+
+The target also enables the STM32 independent watchdog (`IWDG`) with a 100 ms timeout. The watchdog is fed only after a TIM1 opportunity is admitted, so a stalled firmware loop resets the MCU independently of TIM1 and DWT. Boot re-establishes the D2 motor channel in hard safe-off.
+
 `RuntimeAuthority` remains disarmed and the runtime remains `Ready`, so this executable cannot produce closed-loop `AuthorizedActuation`.
 
-The installed D2 motor channel is nevertheless concretely bound in a hard safe-off state at boot: PB1/TIM3_CH4 is configured for 20 kHz PWM with zero duty, and PB13/PB12 are driven low. No runtime `ActuationSink` owns these peripherals, so control computation cannot reach the physical motor.
+The installed D2 motor channel is concretely bound in a hard safe-off state at boot: PB1/TIM3_CH4 is configured for 20 kHz PWM with zero duty, and PB13/PB12 are driven low. No runtime `ActuationSink` owns these peripherals, so control computation cannot reach the physical motor.
 
 ## Rotary plant semantics
 
@@ -147,11 +157,35 @@ RuntimeAuthority
 AuthorizedActuation
         ↓
 Firmware ActuationSink
+        ↓
+actuator-specific frame
+        ↓
+frame I/O backend
+        ↓
+physical output
 ```
 
 `AuthorizedActuation` has no public constructor. Maintenance output uses a distinct `MaintenanceActuation` proof type and a mutually exclusive Supervisor-owned maintenance authority mode.
 
-`firmware/actuators/tb6612` implements the electrical mapper and a generic hardware-facing `Tb6612Output`. The sink accepts only Supervisor proof types and uses a break-before-make sequence: PWM is forced to zero before direction pins change, then the requested duty is applied. The STM32F103 executable does not yet hand its concrete motor peripherals to this sink.
+`firmware/actuators/tb6612` separates three roles:
+
+```text
+AuthorizedActuation / MaintenanceActuation
+        ↓
+Tb6612Output               Firmware ActuationSink
+        ↓
+Tb6612Mapper               authority-proof -> electrical semantics
+        ↓
+Tb6612ElectricalActuation  actuator-specific frame
+        ↓
+Tb6612FrameIo              target/backend boundary
+```
+
+Drive frames cannot be publicly constructed. `Tb6612Output` owns the frame backend and exposes no public arbitrary-frame application route; its closed-loop and maintenance entry points require their respective Supervisor proof types. `safe_off()` remains the only unqualified output action.
+
+`Tb6612PwmDirIo` is the generic PWM/direction backend implementation and performs break-before-make: PWM is forced to zero before direction pins change, then the requested duty is applied. A target may provide another `Tb6612FrameIo` implementation without changing the authority semantics.
+
+The STM32F103 executable still does not instantiate a runtime `Tb6612Output` or hand its concrete D2 motor peripherals to an actuation sink.
 
 ## Reference-backed nominal live-shadow parameters
 
@@ -187,9 +221,9 @@ supervisor/
 
 firmware/
 ├── interfaces/actuation/     Authorized physical-output contract
-├── actuators/tb6612/         TB6612 mapper and guarded generic sink
+├── actuators/tb6612/         TB6612 mapper, proof-gated sink, frame-I/O boundary
 ├── adapters/estimator-input/ Raw observation -> estimator input promotion
-└── targets/stm32f103/        Sensing, hybrid live-shadow, hard-safe-off D2 binding
+└── targets/stm32f103/        1 kHz live-shadow, IWDG, hard-safe-off D2 binding
 ```
 
 ## Reference-backed nominal parameters
