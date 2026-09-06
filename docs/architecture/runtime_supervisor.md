@@ -17,6 +17,8 @@ ControlRegime::Capture
 ControlRegime::Balance
 ```
 
+`Ready` permits non-actuating live-shadow computation through Controller, Plant actuator-model, and `RuntimeAuthority::evaluate`. It is not closed-loop-authorizable: `RuntimeAuthority` requires `RuntimeState::Active(...)` before it can create `AuthorizedActuation`.
+
 ## State estimation
 
 State estimation belongs to Supervisor.
@@ -48,7 +50,7 @@ Physical state definitions remain Plant-owned; the decision whether a sample may
 
 `ControlWatchdog` independently classifies control liveness as `Disarmed`, `Healthy`, or `Expired`.
 
-Both are explicit authority evidence.
+Both are explicit authority evidence. Firmware supplies timestamp events; Supervisor owns the interpretation of those events as timing/watchdog health.
 
 ## Closed-loop authority
 
@@ -74,6 +76,8 @@ Authorization requires:
 Actuator-model saturation remains explicit in the authority decision as a constrained condition.
 
 `AuthorizedActuation` has no public constructor.
+
+A live-shadow target may call `RuntimeAuthority::evaluate` while remaining `Ready` and disarmed. The resulting decision is observable, but no closed-loop proof token is produced.
 
 ## Maintenance authority
 
@@ -102,5 +106,7 @@ BoundedActuatorCommand
     ↓
 RuntimeAuthority
 ```
+
+The observation source is consumer-owned and may be populated by a Firmware target for each fresh acquisition opportunity. `ControlRuntime` retains ownership of estimator execution, control computation, actuator-model application, and authority evaluation.
 
 `ControlRuntime` has no physical `ActuationSink` dependency. Firmware remains the only domain capable of realizing electrical output.
