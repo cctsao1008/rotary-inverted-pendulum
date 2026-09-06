@@ -25,6 +25,10 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Host tests
         run: cargo test-host
+      - name: SIL smoke scenarios
+        run: |
+          cargo run -p rip-simulation --release -- --scenario balance --duration-s 5 --no-csv
+          cargo run -p rip-simulation --release -- --scenario swingup --duration-s 5 --no-csv
       - name: Clippy
         run: cargo clippy --workspace --exclude rip-firmware-stm32f103 --all-targets -- -D warnings
       - name: STM32F103 release build
