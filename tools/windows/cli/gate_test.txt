@@ -1,7 +1,0 @@
-# Exercise operator-request propagation without binding the motor sink.
-param set control.enable_request 0
-param get control.enable_request
-param set control.enable_request 1
-param get control.enable_request
-param set control.enable_request 0
-param get control.enable_request

@@ -1,8 +1,14 @@
 [workspace]
 members = [
-    "crates/control-domain",
-    "crates/hardware-contract",
-    "crates/motor-authority",
+    "crates/control",
+    "crates/plant",
+    "crates/supervisor",
+    "firmware/stm32f103",
+]
+default-members = [
+    "crates/control",
+    "crates/plant",
+    "crates/supervisor",
 ]
 resolver = "2"
 

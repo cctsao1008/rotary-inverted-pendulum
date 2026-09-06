@@ -1,4 +1,0 @@
-# Closed-loop admission gate status
-param get control.enable_request
-param get control.gate.max_sample_age_us
-param get control.gate.max_entry_theta_mrad
