@@ -38,7 +38,10 @@ const ARM_ENCODER_DIRECTION: i8 = 1;
 const ESTIMATOR_MAX_GAP_US: u64 = 20_000;
 const ESTIMATOR_RATE_FILTER_ALPHA: f32 = 1.0;
 
-const SHADOW_LQR_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, 0.011_20, 0.007_66];
+// Abdullah et al. (2021) use state order [phi, theta, phi_dot, theta_dot]
+// and K=[-2.24, 36.71, -1.49, 3.17] in V=-Kx. Reordering to this project's
+// [theta, theta_dot, phi, phi_dot] and scaling by Kt/Rm=0.005 Nm/V gives:
+const SHADOW_LQR_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, -0.011_20, -0.007_45];
 const SHADOW_PENDULUM_MASS_KG: f32 = 0.04;
 const SHADOW_PENDULUM_COM_LENGTH_M: f32 = 0.129;
 const SHADOW_PENDULUM_INERTIA_KG_M2: f32 = 0.0001;
