@@ -97,7 +97,8 @@ pub fn publish_cycle(cycle: ControlCycle) {
                 scale_micro(bounded_command.predicted_arm_torque.0),
                 Ordering::Relaxed,
             );
-            SHADOW_ACTUATOR_SATURATED.store(u32::from(bounded_command.saturated), Ordering::Relaxed);
+            SHADOW_ACTUATOR_SATURATED
+                .store(u32::from(bounded_command.saturated), Ordering::Relaxed);
             SHADOW_AUTHORITY_REASONS.store(u32::from(authority.reasons.bits()), Ordering::Relaxed);
             SHADOW_AUTHORIZED.store(u32::from(authorized.is_some()), Ordering::Relaxed);
         }
