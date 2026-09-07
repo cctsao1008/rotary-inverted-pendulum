@@ -1,4 +1,6 @@
 pub mod evidence;
+pub mod parameters;
+pub mod rotary;
 pub mod scenario;
 pub mod scheduler;
 pub mod virtual_time;
@@ -10,8 +12,11 @@ use std::path::Path;
 
 pub use evidence::RunArtifacts;
 use evidence::{Manifest, Summary, TraceRecord, SCHEMA_VERSION};
-pub use scenario::Scenario;
-use scheduler::{EventKind, Scheduler};
+pub use parameters::ReferenceAssemblyParameters;
+pub use rotary::RotarySitlSystem;
+pub use scenario::{RotaryScenario, Scenario};
+pub use scheduler::EventKind;
+use scheduler::Scheduler;
 use serde_json::{json, Value};
 use virtual_time::{VirtualDuration, VirtualTime};
 
@@ -32,28 +37,54 @@ impl RunContext {
             virtual_physical_truth_configuration: json!({"mode": "not-materialized"}),
         }
     }
+
+    pub fn with_model_configurations(
+        mut self,
+        production_model_configuration: Value,
+        virtual_physical_truth_configuration: Value,
+    ) -> Self {
+        self.production_model_configuration = production_model_configuration;
+        self.virtual_physical_truth_configuration = virtual_physical_truth_configuration;
+        self
+    }
 }
 
-pub trait PhysicalTimeAdvance {
-    fn advance(&mut self, from: VirtualTime, to: VirtualTime);
+pub trait SitlSystem {
+    fn advance_physical_time(
+        &mut self,
+        _from: VirtualTime,
+        _to: VirtualTime,
+    ) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
+    fn on_event(
+        &mut self,
+        _kind: EventKind,
+        _at: VirtualTime,
+    ) -> Result<Option<Value>, Box<dyn Error>> {
+        Ok(None)
+    }
+
+    fn summary(&self) -> Value {
+        Value::Null
+    }
 }
 
 #[derive(Debug, Default)]
-pub struct NoopPhysicalTimeAdvance;
+pub struct NoopSitlSystem;
 
-impl PhysicalTimeAdvance for NoopPhysicalTimeAdvance {
-    fn advance(&mut self, _from: VirtualTime, _to: VirtualTime) {}
-}
+impl SitlSystem for NoopSitlSystem {}
 
 pub fn execute(context: &RunContext, scenario: &Scenario) -> Result<RunArtifacts, Box<dyn Error>> {
-    let mut time_advance = NoopPhysicalTimeAdvance;
-    execute_with_time_advance(context, scenario, &mut time_advance)
+    let mut system = NoopSitlSystem;
+    execute_with_system(context, scenario, &mut system)
 }
 
-pub fn execute_with_time_advance<A: PhysicalTimeAdvance>(
+pub fn execute_with_system<S: SitlSystem>(
     context: &RunContext,
     scenario: &Scenario,
-    time_advance: &mut A,
+    system: &mut S,
 ) -> Result<RunArtifacts, Box<dyn Error>> {
     scenario.validate()?;
 
@@ -96,7 +127,7 @@ pub fn execute_with_time_advance<A: PhysicalTimeAdvance>(
     while let Some(slice) = scheduler.next_slice() {
         debug_assert_eq!(scheduler.now(), slice.at);
         if slice.at > previous_time {
-            time_advance.advance(previous_time, slice.at);
+            system.advance_physical_time(previous_time, slice.at)?;
             time_advances = time_advances
                 .checked_add(1)
                 .ok_or_else(|| io::Error::other("time-advance counter exhausted"))?;
@@ -116,12 +147,14 @@ pub fn execute_with_time_advance<A: PhysicalTimeAdvance>(
                 EventKind::ActuationCommit => actuation_commits += 1,
             }
 
+            let system_record = system.on_event(event.kind, event.at)?;
             records.push(TraceRecord {
                 schema_version: SCHEMA_VERSION,
                 event_sequence,
                 virtual_time_us: event.at.as_micros(),
                 semantic_phase: event.phase.as_str(),
                 record_kind: event.kind.record_kind(),
+                system: system_record,
             });
             event_sequence = event_sequence
                 .checked_add(1)
@@ -165,6 +198,7 @@ pub fn execute_with_time_advance<A: PhysicalTimeAdvance>(
         admitted_runtime_opportunities,
         missed_runtime_opportunities,
         actuation_commits,
+        system: system.summary(),
     };
 
     Ok(RunArtifacts {
@@ -221,6 +255,7 @@ mod tests {
             sensor_period_us: 5_000,
             runtime_period_us: 5_000,
             missed_runtime_at_us: Vec::new(),
+            rotary: None,
         }
     }
 
@@ -293,9 +328,14 @@ mod tests {
         intervals: Vec<(u64, u64)>,
     }
 
-    impl PhysicalTimeAdvance for TimeAdvanceProbe {
-        fn advance(&mut self, from: VirtualTime, to: VirtualTime) {
+    impl SitlSystem for TimeAdvanceProbe {
+        fn advance_physical_time(
+            &mut self,
+            from: VirtualTime,
+            to: VirtualTime,
+        ) -> Result<(), Box<dyn Error>> {
             self.intervals.push((from.as_micros(), to.as_micros()));
+            Ok(())
         }
     }
 
@@ -305,7 +345,7 @@ mod tests {
         scenario.duration_us = 20_000;
         let mut probe = TimeAdvanceProbe::default();
 
-        let artifacts = execute_with_time_advance(&context(), &scenario, &mut probe).unwrap();
+        let artifacts = execute_with_system(&context(), &scenario, &mut probe).unwrap();
 
         assert_eq!(
             probe.intervals,

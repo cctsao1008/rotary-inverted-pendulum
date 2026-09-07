@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "assembly": "reference-assembly",
+  "plant": {
+    "pendulum_mass_kg": {
+      "value": 0.04,
+      "unit": "kg",
+      "source": "Abdullah et al. (2021), QNET rotary inverted pendulum reference",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "arm_length_m": {
+      "value": 0.085,
+      "unit": "m",
+      "source": "Abdullah et al. (2021), QNET rotary inverted pendulum reference",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "pendulum_com_length_m": {
+      "value": 0.129,
+      "unit": "m",
+      "source": "Abdullah et al. (2021), QNET rotary inverted pendulum reference",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "arm_inertia_kg_m2": {
+      "value": 0.0000057,
+      "unit": "kg*m^2",
+      "source": "Abdullah et al. (2021), QNET rotary inverted pendulum reference",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "pendulum_inertia_kg_m2": {
+      "value": 0.0001,
+      "unit": "kg*m^2",
+      "source": "Abdullah et al. (2021), QNET rotary inverted pendulum reference",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "gravity_m_s2": {
+      "value": 9.81,
+      "unit": "m/s^2",
+      "source": "standard gravity approximation used by the reference model",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "arm_viscous_damping_nm_per_rad_s": {
+      "value": 0.00021,
+      "unit": "N*m/(rad/s)",
+      "source": "derived from QNET Kt*Ke/Rm = 0.042*0.042/8.4",
+      "applicability": "reference-backed nominal Furuta plant"
+    },
+    "pendulum_viscous_damping_nm_per_rad_s": {
+      "value": 0.0,
+      "unit": "N*m/(rad/s)",
+      "source": "current reference model assumption",
+      "applicability": "reference-backed nominal Furuta plant"
+    }
+  },
+  "measurement_model": {
+    "pendulum_upright_adc": {
+      "value": 2928,
+      "unit": "count",
+      "source": "project reference calibration",
+      "applicability": "production RawObservation to EstimatorMeasurement mapping"
+    },
+    "pendulum_radians_per_count": {
+      "value": 0.0015339808,
+      "unit": "rad/count",
+      "source": "2*pi/4096 nominal 12-bit angular scale",
+      "applicability": "production RawObservation to EstimatorMeasurement mapping"
+    },
+    "pendulum_direction": {
+      "value": 1,
+      "unit": "sign",
+      "source": "project reference convention",
+      "applicability": "production pendulum-angle sign convention"
+    },
+    "arm_encoder_counts_per_revolution": {
+      "value": 1040.0,
+      "unit": "count/rev",
+      "source": "project reference encoder configuration",
+      "applicability": "production RawObservation to EstimatorMeasurement mapping"
+    },
+    "arm_encoder_direction": {
+      "value": 1,
+      "unit": "sign",
+      "source": "project reference convention",
+      "applicability": "production arm-angle sign convention"
+    }
+  },
+  "virtual_sensor": {
+    "pendulum_upright_adc": {
+      "value": 2928,
+      "unit": "count",
+      "source": "reference-assembly nominal sensor truth",
+      "applicability": "SITL virtual pendulum sensor"
+    },
+    "pendulum_radians_per_count": {
+      "value": 0.0015339808,
+      "unit": "rad/count",
+      "source": "2*pi/4096 nominal 12-bit angular scale",
+      "applicability": "SITL virtual pendulum sensor"
+    },
+    "pendulum_direction": {
+      "value": 1,
+      "unit": "sign",
+      "source": "reference-assembly nominal sensor truth",
+      "applicability": "SITL virtual pendulum sensor"
+    },
+    "pendulum_adc_modulus": {
+      "value": 4096,
+      "unit": "count",
+      "source": "12-bit virtual ADC model",
+      "applicability": "SITL virtual pendulum sensor"
+    },
+    "arm_encoder_counts_per_revolution": {
+      "value": 1040.0,
+      "unit": "count/rev",
+      "source": "reference-assembly nominal sensor truth",
+      "applicability": "SITL virtual arm encoder"
+    },
+    "arm_encoder_direction": {
+      "value": 1,
+      "unit": "sign",
+      "source": "reference-assembly nominal sensor truth",
+      "applicability": "SITL virtual arm encoder"
+    }
+  },
+  "production_actuator_model": {
+    "torque_per_effective_command_nm": {
+      "value": 0.05,
+      "unit": "N*m",
+      "source": "QNET Kt/Rm=0.005 N*m/V with reported +/-10 V control span",
+      "applicability": "production static inverse actuator model"
+    },
+    "command_deadzone": {
+      "value": 0.0,
+      "unit": "normalized",
+      "source": "current production-model assumption",
+      "applicability": "production normalized actuator-command semantics"
+    }
+  },
+  "firmware_actuator_mapping": {
+    "positive_command_is_positive_drive": {
+      "value": true,
+      "unit": "boolean",
+      "source": "project reference TB6612 direction convention",
+      "applicability": "production Firmware actuator adapter"
+    }
+  },
+  "virtual_physical_actuator": {
+    "torque_per_duty_nm": {
+      "value": 0.05,
+      "unit": "N*m",
+      "source": "reference-assembly nominal virtual actuator truth",
+      "applicability": "SITL TB6612/motor physical-truth model"
+    },
+    "positive_drive_is_positive_arm_torque": {
+      "value": true,
+      "unit": "boolean",
+      "source": "reference-assembly nominal mechanical sign convention",
+      "applicability": "SITL TB6612/motor physical-truth model"
+    }
+  }
+}

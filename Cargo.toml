@@ -4,7 +4,7 @@ members = [
     "plant/plant-observation",
     "plant/measurement-model",
     "plant/actuator-model",
-    "plant/dynamics-model",
+    "plant/plant-model",
     "control/state-feedback",
     "control/hybrid-control",
     "supervisor/state-estimator",
@@ -14,7 +14,6 @@ members = [
     "firmware/actuators/tb6612",
     "firmware/adapters/estimator-input",
     "firmware/targets/stm32f103",
-    "tools/simulation",
     "tools/sitl",
 ]
 default-members = [
@@ -22,7 +21,7 @@ default-members = [
     "plant/plant-observation",
     "plant/measurement-model",
     "plant/actuator-model",
-    "plant/dynamics-model",
+    "plant/plant-model",
     "control/state-feedback",
     "control/hybrid-control",
     "supervisor/state-estimator",
@@ -31,7 +30,6 @@ default-members = [
     "firmware/interfaces/actuation",
     "firmware/actuators/tb6612",
     "firmware/adapters/estimator-input",
-    "tools/simulation",
     "tools/sitl",
 ]
 resolver = "2"

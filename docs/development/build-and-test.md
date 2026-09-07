@@ -16,7 +16,41 @@ Equivalent command:
 cargo test --workspace --exclude rip-firmware-stm32f103
 ```
 
-This executes host tests for the portable Plant, Control, Supervisor, and target-independent Firmware crates.
+This executes host tests for the portable Plant, Control, Supervisor, target-independent Firmware crates, and SITL.
+
+## SITL
+
+The deterministic scheduler-only smoke scenario is:
+
+```bash
+cargo run -p rip-sitl --release -- \
+  --scenario tools/sitl/scenarios/deterministic_smoke.toml \
+  --output target/sitl-deterministic
+```
+
+The full Rotary semantic path uses the reference assembly parameter registry:
+
+```bash
+cargo run -p rip-sitl --release -- \
+  --scenario tools/sitl/scenarios/rotary_balance.toml \
+  --parameters parameters/reference-assembly.json \
+  --output target/sitl-balance
+
+cargo run -p rip-sitl --release -- \
+  --scenario tools/sitl/scenarios/rotary_swingup.toml \
+  --parameters parameters/reference-assembly.json \
+  --output target/sitl-swingup
+```
+
+Each run produces:
+
+```text
+manifest.json
+trace.jsonl
+summary.json
+```
+
+The full semantic-path runner executes virtual Furuta dynamics and sensor physics, then reuses production `RawObservation` promotion, estimator, hybrid control, Plant actuator model, Supervisor authority, Firmware TB6612 mapping, and a virtual physical actuator. Physical time advances between scheduler timestamps using the previously committed actuator input; missed runtime opportunities are not replayed.
 
 ## Clippy
 

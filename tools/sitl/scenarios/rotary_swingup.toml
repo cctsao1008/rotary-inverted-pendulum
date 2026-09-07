@@ -1,0 +1,13 @@
+id = "rotary-swingup"
+duration_us = 5000000
+seed = 1
+sensor_period_us = 1000
+runtime_period_us = 1000
+missed_runtime_at_us = []
+
+[rotary]
+plant_step_us = 50
+initial_theta_rad = 3.0915926
+initial_theta_dot_rad_s = 0.0
+initial_phi_rad = 0.0
+initial_phi_dot_rad_s = 0.0

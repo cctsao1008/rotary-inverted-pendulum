@@ -1,6 +1,6 @@
 # Repository Layout
 
-The active source tree is Rust-first and exposes the four architectural domains directly at repository root.
+The repository exposes the same top-level control-system grammar used by `single-wheel-platform`. Domain ownership is visible in the path; plant-specific and controller-specific leaves remain project-specific.
 
 ```text
 Cargo.toml
@@ -9,6 +9,7 @@ rust-toolchain.toml
 
 plant/
 ├── robot-domain/
+├── plant-model/
 ├── plant-observation/
 ├── measurement-model/
 └── actuator-model/
@@ -28,13 +29,32 @@ firmware/
 ├── adapters/estimator-input/
 └── targets/stm32f103/
 
+parameters/
+├── README.md
+└── reference-assembly.json
+
+tools/
+└── sitl/
+
 docs/
 ├── architecture/
 ├── hardware/
 └── development/
 ```
 
-There is no generic top-level `crates/` container. Domain ownership is visible in the path itself.
+The shared repository grammar is:
+
+```text
+plant/
+control/
+supervisor/
+firmware/
+parameters/
+docs/
+tools/
+```
+
+Only leaves with implemented system content are materialized. The Firmware taxonomy remains `interfaces / sensors / communications / ui / buses / actuators / adapters / boards / assemblies / targets`; this project currently materializes only the leaves required by its implemented hardware path.
 
 ## Dependency direction
 
@@ -53,6 +73,6 @@ Control  Supervisor
 
 Control consumes Plant semantics. Supervisor composes Plant and Control behavior while owning estimation and authority. Firmware depends on the portable domains and owns physical realization.
 
-`firmware/adapters/estimator-input` converts Plant-owned raw ADC/encoder evidence into the Supervisor estimator input representation. `firmware/targets/stm32f103` currently instantiates only the sensing side of the runtime and does not link an actuator sink.
+`firmware/adapters/estimator-input` converts Plant-owned raw ADC/encoder evidence into the Supervisor estimator input representation. `firmware/targets/stm32f103` materializes the sensing, estimation, control, actuator-model, and authority computation path without linking a physical actuator sink.
 
-The previous C implementation and superseded Rust layout are retained in Git history rather than in the active source tree.
+`tools/sitl` is host-side verification infrastructure rather than a fifth architecture domain. It provides deterministic virtual time, scenario execution, machine-readable evidence, the virtual Furuta plant/sensor/actuator world, and reuse of the production semantic path through the Firmware TB6612 actuator adapter.

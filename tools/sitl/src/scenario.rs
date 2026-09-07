@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
     pub id: String,
@@ -15,6 +15,18 @@ pub struct Scenario {
     pub runtime_period_us: u64,
     #[serde(default)]
     pub missed_runtime_at_us: Vec<u64>,
+    #[serde(default)]
+    pub rotary: Option<RotaryScenario>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RotaryScenario {
+    pub plant_step_us: u64,
+    pub initial_theta_rad: f32,
+    pub initial_theta_dot_rad_s: f32,
+    pub initial_phi_rad: f32,
+    pub initial_phi_dot_rad_s: f32,
 }
 
 #[derive(Debug)]
@@ -27,6 +39,10 @@ pub enum ScenarioError {
     MissedRuntimeOutOfRange(u64),
     MissedRuntimeOffGrid(u64),
     MissedRuntimeNotStrictlyIncreasing,
+    ZeroPlantStep,
+    PlantStepNotAligned,
+    RotaryInitialStateNonFinite,
+    RotarySensorRuntimeCadenceMismatch,
 }
 
 impl Display for ScenarioError {
@@ -39,12 +55,10 @@ impl Display for ScenarioError {
             Self::ZeroRuntimePeriod => {
                 write!(formatter, "runtime period must be greater than zero")
             }
-            Self::MissedRuntimeOutOfRange(at) => {
-                write!(
-                    formatter,
-                    "missed runtime opportunity {at} us exceeds duration"
-                )
-            }
+            Self::MissedRuntimeOutOfRange(at) => write!(
+                formatter,
+                "missed runtime opportunity {at} us exceeds duration"
+            ),
             Self::MissedRuntimeOffGrid(at) => write!(
                 formatter,
                 "missed runtime opportunity {at} us is not aligned to runtime period"
@@ -52,6 +66,18 @@ impl Display for ScenarioError {
             Self::MissedRuntimeNotStrictlyIncreasing => write!(
                 formatter,
                 "missed runtime opportunities must be unique and strictly increasing"
+            ),
+            Self::ZeroPlantStep => write!(formatter, "rotary plant step must be greater than zero"),
+            Self::PlantStepNotAligned => write!(
+                formatter,
+                "rotary plant step must divide duration, sensor period, and runtime period"
+            ),
+            Self::RotaryInitialStateNonFinite => {
+                write!(formatter, "rotary initial state must be finite")
+            }
+            Self::RotarySensorRuntimeCadenceMismatch => write!(
+                formatter,
+                "rotary full semantic-path SITL currently requires sensor and runtime periods to match"
             ),
         }
     }
@@ -100,6 +126,32 @@ impl Scenario {
             previous = Some(at);
         }
 
+        if let Some(rotary) = self.rotary {
+            if rotary.plant_step_us == 0 {
+                return Err(ScenarioError::ZeroPlantStep);
+            }
+            if self.duration_us % rotary.plant_step_us != 0
+                || self.sensor_period_us % rotary.plant_step_us != 0
+                || self.runtime_period_us % rotary.plant_step_us != 0
+            {
+                return Err(ScenarioError::PlantStepNotAligned);
+            }
+            if self.sensor_period_us != self.runtime_period_us {
+                return Err(ScenarioError::RotarySensorRuntimeCadenceMismatch);
+            }
+            if ![
+                rotary.initial_theta_rad,
+                rotary.initial_theta_dot_rad_s,
+                rotary.initial_phi_rad,
+                rotary.initial_phi_dot_rad_s,
+            ]
+            .iter()
+            .all(|value| value.is_finite())
+            {
+                return Err(ScenarioError::RotaryInitialStateNonFinite);
+            }
+        }
+
         Ok(())
     }
 
@@ -120,6 +172,7 @@ mod tests {
             sensor_period_us: 5_000,
             runtime_period_us: 5_000,
             missed_runtime_at_us: vec![10_000],
+            rotary: None,
         }
     }
 
@@ -138,6 +191,22 @@ mod tests {
         assert!(matches!(
             scenario.validate(),
             Err(ScenarioError::MissedRuntimeNotStrictlyIncreasing)
+        ));
+    }
+
+    #[test]
+    fn rotary_scenario_requires_integrator_alignment() {
+        let mut scenario = scenario();
+        scenario.rotary = Some(RotaryScenario {
+            plant_step_us: 3_000,
+            initial_theta_rad: 0.0,
+            initial_theta_dot_rad_s: 0.0,
+            initial_phi_rad: 0.0,
+            initial_phi_dot_rad_s: 0.0,
+        });
+        assert!(matches!(
+            scenario.validate(),
+            Err(ScenarioError::PlantStepNotAligned)
         ));
     }
 }

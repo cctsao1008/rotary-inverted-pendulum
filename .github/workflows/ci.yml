@@ -28,15 +28,43 @@ jobs:
       - name: SITL deterministic skeleton
         run: |
           rm -rf target/sitl-run-a target/sitl-run-b
-          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-a --system-identifier rotary-inverted-pendulum --git-commit "$GITHUB_SHA"
-          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-b --system-identifier rotary-inverted-pendulum --git-commit "$GITHUB_SHA"
+          cargo run -p rip-sitl --release -- \
+            --scenario tools/sitl/scenarios/deterministic_smoke.toml \
+            --output target/sitl-run-a \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
+          cargo run -p rip-sitl --release -- \
+            --scenario tools/sitl/scenarios/deterministic_smoke.toml \
+            --output target/sitl-run-b \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
           cmp target/sitl-run-a/manifest.json target/sitl-run-b/manifest.json
           cmp target/sitl-run-a/trace.jsonl target/sitl-run-b/trace.jsonl
           cmp target/sitl-run-a/summary.json target/sitl-run-b/summary.json
-      - name: SIL smoke scenarios
+      - name: Rotary full semantic-path SITL
         run: |
-          cargo run -p rip-simulation --release -- --scenario balance --duration-s 5 --no-csv
-          cargo run -p rip-simulation --release -- --scenario swingup --duration-s 5 --no-csv
+          rm -rf target/sitl-balance-a target/sitl-balance-b target/sitl-swingup
+          cargo run -p rip-sitl --release -- \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --parameters parameters/reference-assembly.json \
+            --output target/sitl-balance-a \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
+          cargo run -p rip-sitl --release -- \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --parameters parameters/reference-assembly.json \
+            --output target/sitl-balance-b \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
+          cmp target/sitl-balance-a/manifest.json target/sitl-balance-b/manifest.json
+          cmp target/sitl-balance-a/trace.jsonl target/sitl-balance-b/trace.jsonl
+          cmp target/sitl-balance-a/summary.json target/sitl-balance-b/summary.json
+          cargo run -p rip-sitl --release -- \
+            --scenario tools/sitl/scenarios/rotary_swingup.toml \
+            --parameters parameters/reference-assembly.json \
+            --output target/sitl-swingup \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
       - name: Clippy
         run: cargo clippy --workspace --exclude rip-firmware-stm32f103 --all-targets -- -D warnings
       - name: STM32F103 release build

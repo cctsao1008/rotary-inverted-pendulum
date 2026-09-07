@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Manifest {
@@ -25,6 +25,8 @@ pub struct TraceRecord {
     pub virtual_time_us: u64,
     pub semantic_phase: &'static str,
     pub record_kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -40,6 +42,7 @@ pub struct Summary {
     pub admitted_runtime_opportunities: u64,
     pub missed_runtime_opportunities: u64,
     pub actuation_commits: u64,
+    pub system: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
