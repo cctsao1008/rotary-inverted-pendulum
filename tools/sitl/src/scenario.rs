@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn valid_scenario_accepts_aligned_missed_runtime_slot() {
         let scenario = scenario();
-        assert_eq!(scenario.validate(), Ok(()));
+        assert!(scenario.validate().is_ok());
         assert!(scenario.runtime_is_missed(10_000));
         assert!(!scenario.runtime_is_missed(15_000));
     }
