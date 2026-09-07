@@ -1,6 +1,6 @@
 # Repository Layout
 
-The repository exposes the same top-level control-system grammar used by `single-wheel-platform`. Domain ownership is visible in the path; plant-specific and controller-specific leaves remain project-specific.
+The repository uses the same top-level control-system grammar as `single-wheel-platform`. Domain ownership is visible in the path; plant-specific and controller-specific leaves remain project-specific.
 
 ```text
 Cargo.toml
@@ -24,10 +24,31 @@ supervisor/
 └── control-runtime/
 
 firmware/
-├── interfaces/actuation/
-├── actuators/tb6612/
-├── adapters/estimator-input/
-└── targets/stm32f103/
+├── interfaces/
+│   └── actuation/
+├── sensors/
+│   ├── pendulum-adc/
+│   └── arm-encoder/
+├── communications/
+│   └── telemetry/
+├── ui/
+│   ├── status/
+│   └── oled/
+├── buses/
+│   └── software-spi/
+├── actuators/
+│   └── tb6612/
+├── adapters/
+│   └── estimator-input/
+├── boards/
+│   └── forest-s1-d1/
+├── assemblies/
+│   └── forest-d1-reference/
+├── recording/
+│   ├── runtime-observation/
+│   └── timing-evidence/
+└── targets/
+    └── stm32f103/
 
 support/
 └── dsp-kernel/
@@ -54,9 +75,27 @@ supervisor/
 firmware/
 ```
 
-`support/`, `parameters/`, `docs/`, and `tools/` are repository support areas rather than additional production architecture domains. Only leaves with implemented system content are materialized.
+`support/`, `parameters/`, `docs/`, and `tools/` are repository support areas rather than additional production architecture domains.
 
-The Firmware taxonomy remains `interfaces / sensors / communications / ui / buses / actuators / adapters / boards / assemblies / targets`; this project currently materializes only the leaves required by its implemented hardware path.
+## Firmware ownership
+
+`firmware/sensors` owns device acquisition and raw hardware evidence. Pendulum ADC acquisition packages ADC samples without applying Plant calibration; arm-encoder acquisition extends the wrapping hardware counter into the accumulated-count observation semantic.
+
+`firmware/buses/software-spi` owns the write-only mode-0 clock/data transport used by the local display. SSD1315 reset, D/C, framebuffer, page addressing, and bounded flush semantics remain in `firmware/ui/oled`.
+
+`firmware/boards/forest-s1-d1` owns board-level pin/peripheral wiring and clock constants. `firmware/assemblies/forest-d1-reference` maps populated devices to system roles and defines the reference local-UI/telemetry composition rates.
+
+`firmware/recording/runtime-observation` publishes the canonical live runtime snapshot; `firmware/recording/timing-evidence` owns runtime timing characterization and its debugger-visible evidence.
+
+`firmware/communications/telemetry` owns the fixed runtime telemetry packet and latest-snapshot/no-replay publication semantics. The STM32 target realizes that transport on USART1 at 115200 baud and services it outside the critical control-path timing interval.
+
+`firmware/ui/status` owns local status-page and key-interaction semantics. `firmware/ui/oled` owns the SSD1315 128×64 representation, dirty-page framebuffer, and bounded background display service. The reference target reclaims PA15/PB3/PB4 by disabling JTAG while retaining SWD.
+
+`firmware/adapters/estimator-input` converts Plant-owned raw observations into the Supervisor estimator input representation. `firmware/actuators/tb6612` owns proof-gated electrical realization semantics. `firmware/targets/stm32f103` composes the concrete MCU peripherals with these Firmware boundaries and the portable production domains.
+
+The STM32 target keeps D2 hard-safe-off: PB1/TIM3_CH4 is configured for 20 kHz PWM with zero duty, PB13/PB12 are low, and no runtime `ActuationSink` owns those peripherals.
+
+## Support ownership
 
 `support/dsp-kernel` owns cross-domain numerical implementation primitives. Production ARM builds use the target DSP backend while host builds preserve deterministic semantic behavior for tests and SITL. It owns no Plant, Control, Supervisor, or Firmware semantics.
 
@@ -76,7 +115,5 @@ Control  Supervisor
 ```
 
 Control consumes Plant semantics. Supervisor composes Plant and Control behavior while owning estimation and authority. Firmware depends on the portable domains and owns physical realization. Production-domain crates may depend on narrowly scoped `support/` implementation primitives, but `support/` must not depend back on production-domain semantics.
-
-`firmware/adapters/estimator-input` converts Plant-owned raw ADC/encoder evidence into the Supervisor estimator input representation. `firmware/targets/stm32f103` materializes the sensing, estimation, control, actuator-model, and authority computation path without linking a physical actuator sink.
 
 `tools/sitl` is host-side verification infrastructure rather than a fifth architecture domain. It provides deterministic virtual time, scenario execution, machine-readable evidence, the virtual Furuta plant/sensor/actuator world, and reuse of the production semantic path through the Firmware TB6612 actuator adapter.
