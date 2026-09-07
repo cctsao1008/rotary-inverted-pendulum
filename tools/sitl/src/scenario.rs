@@ -36,9 +36,14 @@ impl Display for ScenarioError {
             Self::Parse(error) => write!(formatter, "failed to parse scenario: {error}"),
             Self::EmptyId => write!(formatter, "scenario id must not be empty"),
             Self::ZeroSensorPeriod => write!(formatter, "sensor period must be greater than zero"),
-            Self::ZeroRuntimePeriod => write!(formatter, "runtime period must be greater than zero"),
+            Self::ZeroRuntimePeriod => {
+                write!(formatter, "runtime period must be greater than zero")
+            }
             Self::MissedRuntimeOutOfRange(at) => {
-                write!(formatter, "missed runtime opportunity {at} us exceeds duration")
+                write!(
+                    formatter,
+                    "missed runtime opportunity {at} us exceeds duration"
+                )
             }
             Self::MissedRuntimeOffGrid(at) => write!(
                 formatter,

@@ -176,8 +176,12 @@ mod tests {
         let at = VirtualTime(5_000);
 
         scheduler.schedule(at, EventKind::ActuationCommit).unwrap();
-        scheduler.schedule(at, EventKind::ProductionRuntime).unwrap();
-        scheduler.schedule(at, EventKind::ObservationDelivery).unwrap();
+        scheduler
+            .schedule(at, EventKind::ProductionRuntime)
+            .unwrap();
+        scheduler
+            .schedule(at, EventKind::ObservationDelivery)
+            .unwrap();
         scheduler.schedule(at, EventKind::SensorSample).unwrap();
         scheduler.schedule(at, EventKind::ScenarioStart).unwrap();
 
@@ -200,7 +204,9 @@ mod tests {
     fn equal_phase_events_preserve_insertion_sequence() {
         let mut scheduler = Scheduler::new();
         let at = VirtualTime(5_000);
-        let first = scheduler.schedule(at, EventKind::ProductionRuntime).unwrap();
+        let first = scheduler
+            .schedule(at, EventKind::ProductionRuntime)
+            .unwrap();
         let second = scheduler
             .schedule(at, EventKind::RuntimeOpportunityMissed)
             .unwrap();

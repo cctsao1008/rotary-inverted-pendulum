@@ -28,7 +28,8 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let cli = parse_cli().map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let cli =
+        parse_cli().map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     let scenario = Scenario::load(&cli.scenario)?;
     let artifacts = execute(&scenario)?;
     write_artifacts(&cli.output, &artifacts)?;
