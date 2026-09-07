@@ -110,6 +110,7 @@ pub const OLED: OledWiring = OledWiring {
     dc_pin: Pin::new(Port::A, 15),
 };
 pub const OLED_REQUIRES_JTAG_DISABLE: bool = true;
+const _: () = assert!(OLED_REQUIRES_JTAG_DISABLE);
 pub const SWDIO: Pin = Pin::new(Port::A, 13);
 pub const SWCLK: Pin = Pin::new(Port::A, 14);
 
@@ -133,6 +134,5 @@ mod tests {
     fn debug_port_and_oled_wiring_do_not_claim_swd_pins() {
         assert_ne!(OLED.clock_pin, SWDIO);
         assert_ne!(OLED.data_pin, SWCLK);
-        assert!(OLED_REQUIRES_JTAG_DISABLE);
     }
 }
