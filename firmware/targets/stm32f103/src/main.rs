@@ -10,16 +10,13 @@ use panic_halt as _;
 use rip_actuator_model::{ArmActuatorModel, ArmActuatorParameters};
 use rip_arm_encoder_sensor::EncoderCounterAccumulator;
 use rip_assembly_forest_d1_reference::{
-    telemetry_period_ticks, ui_period_ticks, OLED_BACKGROUND_FLUSH_BYTES,
-    TELEMETRY_DEFAULT_ENABLED,
+    telemetry_period_ticks, ui_period_ticks, OLED_BACKGROUND_FLUSH_BYTES, TELEMETRY_DEFAULT_ENABLED,
 };
 use rip_board_forest_s1_d1::{
-    CONTROL_TICK_HZ, HSE_MHZ, MOTOR_PWM_HZ, OLED_SOFTWARE_SPI_HALF_PERIOD_PADDING,
-    SYSTEM_CLOCK_HZ, SYSTEM_CLOCK_MHZ, UART_BAUD,
+    CONTROL_TICK_HZ, HSE_MHZ, MOTOR_PWM_HZ, OLED_SOFTWARE_SPI_HALF_PERIOD_PADDING, SYSTEM_CLOCK_HZ,
+    SYSTEM_CLOCK_MHZ, UART_BAUD,
 };
-use rip_control_runtime::{
-    ControlRuntime, RuntimeObservation, RuntimeObservationSource,
-};
+use rip_control_runtime::{ControlRuntime, RuntimeObservation, RuntimeObservationSource};
 use rip_estimator_input_adapter::EstimatorInputAdapter;
 use rip_hybrid_control::{
     CapturePolicy, CapturePolicyConfig, EnergySwingUpConfig, EnergySwingUpController,
@@ -34,14 +31,12 @@ use rip_runtime_observation_record::{
     publish_cycle, publish_cycle_error, publish_raw, publish_regime, publish_runtime_health,
     snapshot as runtime_record_snapshot,
 };
-use rip_runtime_state::{
-    ControlWatchdog, RuntimeLimits, SensorTimingLimits, SensorTimingMonitor,
-};
+use rip_runtime_state::{ControlWatchdog, RuntimeLimits, SensorTimingLimits, SensorTimingMonitor};
 use rip_software_spi::{OutputLine, SoftwareSpi};
 use rip_state_estimator::EstimatorConfig;
 use rip_state_feedback::LqrController;
 use rip_status_view::{
-    KeyService, LocalUi, StatusView, KEY_M_MASK, KEY_MINUS_MASK, KEY_PLUS_MASK, KEY_USER_MASK,
+    KeyService, LocalUi, StatusView, KEY_MINUS_MASK, KEY_M_MASK, KEY_PLUS_MASK, KEY_USER_MASK,
     KEY_X_MASK,
 };
 use rip_telemetry::{
@@ -290,9 +285,7 @@ fn main() -> ! {
 
     let mut gpioa = dp.GPIOA.split(&mut rcc);
     let mut gpiob = dp.GPIOB.split(&mut rcc);
-    let (pa15, pb3, pb4) = afio
-        .mapr
-        .disable_jtag(gpioa.pa15, gpiob.pb3, gpiob.pb4);
+    let (pa15, pb3, pb4) = afio.mapr.disable_jtag(gpioa.pa15, gpiob.pb3, gpiob.pb4);
 
     let mut pendulum_pin = gpioa.pa7.into_analog(&mut gpioa.crl);
     let mut adc1 = adc::Adc::new(dp.ADC1, &mut rcc);
@@ -308,12 +301,7 @@ fn main() -> ! {
     let motor_pwm_pin = gpiob.pb1.into_alternate_push_pull(&mut gpiob.crl);
     let mut motor_pwm = dp
         .TIM3
-        .pwm_hz::<Tim3NoRemap, _, _>(
-            motor_pwm_pin,
-            &mut afio.mapr,
-            MOTOR_PWM_HZ.Hz(),
-            &mut rcc,
-        )
+        .pwm_hz::<Tim3NoRemap, _, _>(motor_pwm_pin, &mut afio.mapr, MOTOR_PWM_HZ.Hz(), &mut rcc)
         .split();
     motor_pwm.set_duty(0);
     motor_pwm.enable();
@@ -437,7 +425,6 @@ fn main() -> ! {
         // Exactly one fresh acquisition/control opportunity is admitted per
         // observed TIM1 update flag. Missed periods coalesce and are not replayed.
         while control_tick.wait().is_err() {}
-
         let cycle_started = timebase.mark();
         let tick_phase_us = control_tick.now().ticks();
         let admitted_at = timebase.now();
