@@ -9,8 +9,8 @@ use std::io;
 use std::path::Path;
 
 pub use evidence::RunArtifacts;
-pub use scenario::Scenario;
 use evidence::{Manifest, Summary, TraceRecord, SCHEMA_VERSION};
+pub use scenario::Scenario;
 use scheduler::{EventKind, Scheduler};
 use serde_json::{json, Value};
 use virtual_time::{VirtualDuration, VirtualTime};
@@ -45,10 +45,7 @@ impl PhysicalTimeAdvance for NoopPhysicalTimeAdvance {
     fn advance(&mut self, _from: VirtualTime, _to: VirtualTime) {}
 }
 
-pub fn execute(
-    context: &RunContext,
-    scenario: &Scenario,
-) -> Result<RunArtifacts, Box<dyn Error>> {
+pub fn execute(context: &RunContext, scenario: &Scenario) -> Result<RunArtifacts, Box<dyn Error>> {
     let mut time_advance = NoopPhysicalTimeAdvance;
     execute_with_time_advance(context, scenario, &mut time_advance)
 }
@@ -154,9 +151,7 @@ pub fn execute_with_time_advance<A: PhysicalTimeAdvance>(
         runtime_period_us: scenario.runtime_period_us,
         missed_runtime_at_us: scenario.missed_runtime_at_us.clone(),
         production_model_configuration: context.production_model_configuration.clone(),
-        virtual_physical_truth_configuration: context
-            .virtual_physical_truth_configuration
-            .clone(),
+        virtual_physical_truth_configuration: context.virtual_physical_truth_configuration.clone(),
     };
     let summary = Summary {
         schema_version: SCHEMA_VERSION,
@@ -249,7 +244,10 @@ mod tests {
 
         assert_eq!(manifest["system_identifier"], "rotary-inverted-pendulum");
         assert_eq!(manifest["git_commit"], "test-commit");
-        assert_eq!(manifest["production_model_configuration"]["mode"], "not-materialized");
+        assert_eq!(
+            manifest["production_model_configuration"]["mode"],
+            "not-materialized"
+        );
         assert_eq!(
             manifest["virtual_physical_truth_configuration"]["mode"],
             "not-materialized"
@@ -307,12 +305,16 @@ mod tests {
         scenario.duration_us = 20_000;
         let mut probe = TimeAdvanceProbe::default();
 
-        let artifacts =
-            execute_with_time_advance(&context(), &scenario, &mut probe).unwrap();
+        let artifacts = execute_with_time_advance(&context(), &scenario, &mut probe).unwrap();
 
         assert_eq!(
             probe.intervals,
-            vec![(0, 5_000), (5_000, 10_000), (10_000, 15_000), (15_000, 20_000)]
+            vec![
+                (0, 5_000),
+                (5_000, 10_000),
+                (10_000, 15_000),
+                (15_000, 20_000)
+            ]
         );
         assert!(!artifacts.trace_jsonl.contains("integrate_plant_to"));
 
