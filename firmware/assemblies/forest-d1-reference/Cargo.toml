@@ -1,0 +1,11 @@
+[package]
+name = "rip-assembly-forest-d1-reference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-board-forest-s1-d1 = { path = "../../boards/forest-s1-d1" }
+
+[lib]
+path = "src/lib.rs"
