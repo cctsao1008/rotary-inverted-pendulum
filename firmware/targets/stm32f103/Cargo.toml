@@ -29,5 +29,5 @@ rip-state-estimator = { path = "../../../supervisor/state-estimator" }
 rip-state-feedback = { path = "../../../control/state-feedback" }
 rip-status-view = { path = "../../ui/status" }
 rip-telemetry = { path = "../../communications/telemetry" }
-rip-timing-evidence = { path = "../../recording/timing-evidence" }
+rip-timing-evidence = { package = "rip-timing-evidence-record", path = "../../recording/timing-evidence" }
 stm32f1xx-hal = { version = "0.11.0", features = ["stm32f103", "medium"] }
