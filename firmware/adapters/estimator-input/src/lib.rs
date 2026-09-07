@@ -11,34 +11,6 @@ pub enum AdapterError {
     ArmEncoderEvidenceUnavailable,
 }
 
-/// Converts one wrapping 16-bit hardware encoder counter into the Plant-owned
-/// accumulated-count observation semantic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EncoderCounterAccumulator {
-    previous_counter: u16,
-    accumulated_count: i32,
-}
-
-impl EncoderCounterAccumulator {
-    pub const fn new(initial_counter: u16) -> Self {
-        Self {
-            previous_counter: initial_counter,
-            accumulated_count: 0,
-        }
-    }
-
-    pub fn update(&mut self, counter: u16) -> i32 {
-        let delta = counter.wrapping_sub(self.previous_counter) as i16 as i32;
-        self.previous_counter = counter;
-        self.accumulated_count = self.accumulated_count.saturating_add(delta);
-        self.accumulated_count
-    }
-
-    pub const fn accumulated_count(self) -> i32 {
-        self.accumulated_count
-    }
-}
-
 /// Firmware semantic adapter from Plant-owned raw evidence to the
 /// Supervisor-owned estimator input representation.
 #[derive(Debug, Clone, Copy)]
@@ -96,18 +68,6 @@ mod tests {
 
     fn good_quality() -> MeasurementQuality {
         MeasurementQuality::AVAILABLE | MeasurementQuality::IO_OK | MeasurementQuality::TIMING_VALID
-    }
-
-    #[test]
-    fn encoder_accumulator_handles_forward_counter_wrap() {
-        let mut accumulator = EncoderCounterAccumulator::new(65_530);
-        assert_eq!(accumulator.update(4), 10);
-    }
-
-    #[test]
-    fn encoder_accumulator_handles_reverse_counter_wrap() {
-        let mut accumulator = EncoderCounterAccumulator::new(4);
-        assert_eq!(accumulator.update(65_530), -10);
     }
 
     #[test]

@@ -1,0 +1,12 @@
+[package]
+name = "rip-status-view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-runtime-observation-record = { path = "../../recording/runtime-observation" }
+rip-timing-evidence = { path = "../../recording/timing-evidence" }
+
+[lib]
+path = "src/lib.rs"

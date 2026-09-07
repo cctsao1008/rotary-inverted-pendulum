@@ -2,11 +2,26 @@
 #![forbid(unsafe_code)]
 
 /// Minimal infallible digital-output contract used by the write-only software
-/// SPI transport. Concrete MCU GPIO errors are impossible on the STM32F103
-/// push-pull outputs used by the reference board.
+/// SPI transport.
 pub trait OutputLine {
     fn set_low(&mut self);
     fn set_high(&mut self);
+}
+
+/// Any embedded-hal 1.0 digital output can serve as a software-SPI line. The
+/// Forest STM32 GPIO implementation is infallible in normal operation; errors
+/// are intentionally ignored because this transport has no readback path.
+impl<T> OutputLine for T
+where
+    T: embedded_hal::digital::OutputPin,
+{
+    fn set_low(&mut self) {
+        let _ = embedded_hal::digital::OutputPin::set_low(self);
+    }
+
+    fn set_high(&mut self) {
+        let _ = embedded_hal::digital::OutputPin::set_high(self);
+    }
 }
 
 /// Write-only mode-0 software SPI used by the reference OLED wiring.
