@@ -15,6 +15,7 @@ members = [
     "firmware/adapters/estimator-input",
     "firmware/targets/stm32f103",
     "tools/simulation",
+    "tools/sitl",
 ]
 default-members = [
     "plant/robot-domain",
@@ -31,6 +32,7 @@ default-members = [
     "firmware/actuators/tb6612",
     "firmware/adapters/estimator-input",
     "tools/simulation",
+    "tools/sitl",
 ]
 resolver = "2"
 

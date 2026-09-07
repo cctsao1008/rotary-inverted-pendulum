@@ -25,6 +25,14 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Host tests
         run: cargo test-host
+      - name: SITL deterministic skeleton
+        run: |
+          rm -rf target/sitl-run-a target/sitl-run-b
+          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-a
+          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-b
+          cmp target/sitl-run-a/manifest.json target/sitl-run-b/manifest.json
+          cmp target/sitl-run-a/trace.jsonl target/sitl-run-b/trace.jsonl
+          cmp target/sitl-run-a/summary.json target/sitl-run-b/summary.json
       - name: SIL smoke scenarios
         run: |
           cargo run -p rip-simulation --release -- --scenario balance --duration-s 5 --no-csv

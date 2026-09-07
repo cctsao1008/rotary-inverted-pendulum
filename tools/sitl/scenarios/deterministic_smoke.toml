@@ -1,0 +1,6 @@
+id = "deterministic-smoke"
+duration_us = 100000
+seed = 1
+sensor_period_us = 5000
+runtime_period_us = 5000
+missed_runtime_at_us = []
