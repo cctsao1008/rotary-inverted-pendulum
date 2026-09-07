@@ -249,9 +249,7 @@ impl RotarySitlSystem {
             pendulum_inertia_kg_m2: p.pendulum_inertia_kg_m2.value,
             gravity_m_s2: p.gravity_m_s2.value,
             arm_viscous_damping_nm_per_rad_s: p.arm_viscous_damping_nm_per_rad_s.value,
-            pendulum_viscous_damping_nm_per_rad_s: p
-                .pendulum_viscous_damping_nm_per_rad_s
-                .value,
+            pendulum_viscous_damping_nm_per_rad_s: p.pendulum_viscous_damping_nm_per_rad_s.value,
         };
         let initial_state = FurutaState {
             theta: scenario.initial_theta_rad,
@@ -314,12 +312,9 @@ impl RotarySitlSystem {
         let timeout_after_us = sensor_period_us
             .checked_mul(20)
             .ok_or_else(|| boxed("sensor timeout threshold overflow"))?;
-        let timing_limits = SensorTimingLimits::new(
-            sensor_period_us,
-            late_after_us,
-            timeout_after_us,
-        )
-        .ok_or_else(|| boxed("invalid sensor timing limits"))?;
+        let timing_limits =
+            SensorTimingLimits::new(sensor_period_us, late_after_us, timeout_after_us)
+                .ok_or_else(|| boxed("invalid sensor timing limits"))?;
         let timing_monitor = SensorTimingMonitor::new(timing_limits, 0);
         let watchdog = ControlWatchdog::new(timeout_after_us)
             .ok_or_else(|| boxed("invalid control watchdog timeout"))?;
@@ -370,9 +365,11 @@ impl RotarySitlSystem {
     }
 
     fn sensor_sample(&mut self, at: VirtualTime) -> Result<Value, Box<dyn Error>> {
-        let raw = self
-            .sensors
-            .observe(self.plant.state(), self.sample_index, TimestampUs(at.as_micros()));
+        let raw = self.sensors.observe(
+            self.plant.state(),
+            self.sample_index,
+            TimestampUs(at.as_micros()),
+        );
         self.sample_index = self
             .sample_index
             .checked_add(1)
@@ -474,7 +471,8 @@ impl RotarySitlSystem {
                     self.metrics.saturated_cycles = self.metrics.saturated_cycles.saturating_add(1);
                 }
                 if authorized.is_some() {
-                    self.metrics.authorized_cycles = self.metrics.authorized_cycles.saturating_add(1);
+                    self.metrics.authorized_cycles =
+                        self.metrics.authorized_cycles.saturating_add(1);
                 } else {
                     self.metrics.denied_cycles = self.metrics.denied_cycles.saturating_add(1);
                 }
@@ -664,7 +662,7 @@ fn estimated_state_json(state: EstimatedState) -> Value {
         "theta_dot_rad_s": state.theta_dot.0,
         "phi_rad": state.phi.0,
         "phi_dot_rad_s": state.phi_dot.0,
-        "captured_at_us": state.captured_at.0,
+        "captured_at_us": state.timestamp.0,
         "validity": format!("{:?}", state.validity)
     })
 }
@@ -755,7 +753,9 @@ mod tests {
         assert!(summary["system"]["computed_cycles"].as_u64().unwrap() > 0);
         assert!(summary["system"]["authorized_cycles"].as_u64().unwrap() > 0);
         assert!(artifacts.trace_jsonl.contains("tb6612_frame"));
-        assert!(artifacts.trace_jsonl.contains("authorized_actuation_present"));
+        assert!(artifacts
+            .trace_jsonl
+            .contains("authorized_actuation_present"));
     }
 
     #[test]
@@ -793,8 +793,11 @@ mod tests {
                     .pendulum_radians_per_count
                     .value
         );
-        let arm_quantum =
-            2.0 * PI / parameters.measurement_model.arm_encoder_counts_per_revolution.value;
+        let arm_quantum = 2.0 * PI
+            / parameters
+                .measurement_model
+                .arm_encoder_counts_per_revolution
+                .value;
         assert!((measurement.phi.0 - state.phi).abs() <= arm_quantum);
     }
 }
