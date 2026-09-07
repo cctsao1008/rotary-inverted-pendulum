@@ -126,7 +126,10 @@ mod tests {
             .iter()
             .filter_map(|(id, level)| (*id == 1).then_some(*level))
             .collect();
-        assert_eq!(data_levels, [true, false, true, false, false, false, false, false]);
+        assert_eq!(
+            data_levels,
+            [true, false, true, false, false, false, false, false]
+        );
         assert_eq!(events.last(), Some(&(0, false)));
     }
 }
