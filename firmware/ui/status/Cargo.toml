@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 rip-runtime-observation-record = { path = "../../recording/runtime-observation" }
-rip-timing-evidence = { path = "../../recording/timing-evidence" }
+rip-timing-evidence = { package = "rip-timing-evidence-record", path = "../../recording/timing-evidence" }
 
 [lib]
 path = "src/lib.rs"
