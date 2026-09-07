@@ -117,7 +117,7 @@ impl Scenario {
             if at > self.duration_us {
                 return Err(ScenarioError::MissedRuntimeOutOfRange(at));
             }
-            if at % self.runtime_period_us != 0 {
+            if !at.is_multiple_of(self.runtime_period_us) {
                 return Err(ScenarioError::MissedRuntimeOffGrid(at));
             }
             if previous.is_some_and(|value| value >= at) {
@@ -130,9 +130,9 @@ impl Scenario {
             if rotary.plant_step_us == 0 {
                 return Err(ScenarioError::ZeroPlantStep);
             }
-            if self.duration_us % rotary.plant_step_us != 0
-                || self.sensor_period_us % rotary.plant_step_us != 0
-                || self.runtime_period_us % rotary.plant_step_us != 0
+            if !self.duration_us.is_multiple_of(rotary.plant_step_us)
+                || !self.sensor_period_us.is_multiple_of(rotary.plant_step_us)
+                || !self.runtime_period_us.is_multiple_of(rotary.plant_step_us)
             {
                 return Err(ScenarioError::PlantStepNotAligned);
             }
