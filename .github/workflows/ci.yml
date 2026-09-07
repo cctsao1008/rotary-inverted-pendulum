@@ -28,8 +28,8 @@ jobs:
       - name: SITL deterministic skeleton
         run: |
           rm -rf target/sitl-run-a target/sitl-run-b
-          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-a
-          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-b
+          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-a --system-identifier rotary-inverted-pendulum --git-commit "$GITHUB_SHA"
+          cargo run -p rip-sitl --release -- --scenario tools/sitl/scenarios/deterministic_smoke.toml --output target/sitl-run-b --system-identifier rotary-inverted-pendulum --git-commit "$GITHUB_SHA"
           cmp target/sitl-run-a/manifest.json target/sitl-run-b/manifest.json
           cmp target/sitl-run-a/trace.jsonl target/sitl-run-b/trace.jsonl
           cmp target/sitl-run-a/summary.json target/sitl-run-b/summary.json

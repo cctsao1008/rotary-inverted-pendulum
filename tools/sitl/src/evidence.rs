@@ -1,16 +1,21 @@
 use serde::Serialize;
+use serde_json::Value;
 
 pub const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Manifest {
     pub schema_version: u32,
+    pub system_identifier: String,
+    pub git_commit: String,
     pub scenario: String,
     pub seed: u64,
     pub duration_us: u64,
     pub sensor_period_us: u64,
     pub runtime_period_us: u64,
     pub missed_runtime_at_us: Vec<u64>,
+    pub production_model_configuration: Value,
+    pub virtual_physical_truth_configuration: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -27,6 +32,8 @@ pub struct Summary {
     pub schema_version: u32,
     pub scenario: String,
     pub pass: bool,
+    pub time_slices: u64,
+    pub time_advances: u64,
     pub scheduled_sensor_samples: u64,
     pub delivered_observations: u64,
     pub scheduled_runtime_opportunities: u64,
