@@ -11,7 +11,7 @@ rip-control-runtime = { path = "../../supervisor/control-runtime" }
 rip-estimator-input-adapter = { path = "../../firmware/adapters/estimator-input" }
 rip-hybrid-control = { path = "../../control/hybrid-control" }
 rip-measurement-model = { path = "../../plant/measurement-model" }
-rip-plant-model = { path = "../../plant/plant-model" }
+rip-plant-model = { package = "rip-dynamics-model", path = "../../plant/dynamics-model" }
 rip-plant-observation = { path = "../../plant/plant-observation" }
 rip-robot-domain = { path = "../../plant/robot-domain" }
 rip-runtime-state = { path = "../../supervisor/runtime-state" }

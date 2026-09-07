@@ -9,9 +9,9 @@ rust-toolchain.toml
 
 plant/
 ├── robot-domain/
-├── plant-model/
-├── plant-observation/
+├── dynamics-model/
 ├── measurement-model/
+├── plant-observation/
 └── actuator-model/
 
 control/

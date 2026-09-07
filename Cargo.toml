@@ -1,10 +1,10 @@
 [workspace]
 members = [
     "plant/robot-domain",
-    "plant/plant-observation",
+    "plant/dynamics-model",
     "plant/measurement-model",
+    "plant/plant-observation",
     "plant/actuator-model",
-    "plant/plant-model",
     "control/state-feedback",
     "control/hybrid-control",
     "supervisor/state-estimator",
@@ -18,10 +18,10 @@ members = [
 ]
 default-members = [
     "plant/robot-domain",
-    "plant/plant-observation",
+    "plant/dynamics-model",
     "plant/measurement-model",
+    "plant/plant-observation",
     "plant/actuator-model",
-    "plant/plant-model",
     "control/state-feedback",
     "control/hybrid-control",
     "supervisor/state-estimator",
