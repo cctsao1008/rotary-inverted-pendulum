@@ -29,6 +29,9 @@ firmware/
 ├── adapters/estimator-input/
 └── targets/stm32f103/
 
+support/
+└── dsp-kernel/
+
 parameters/
 ├── README.md
 └── reference-assembly.json
@@ -42,19 +45,20 @@ docs/
 └── development/
 ```
 
-The shared repository grammar is:
+The production architecture remains exactly:
 
 ```text
 plant/
 control/
 supervisor/
 firmware/
-parameters/
-docs/
-tools/
 ```
 
-Only leaves with implemented system content are materialized. The Firmware taxonomy remains `interfaces / sensors / communications / ui / buses / actuators / adapters / boards / assemblies / targets`; this project currently materializes only the leaves required by its implemented hardware path.
+`support/`, `parameters/`, `docs/`, and `tools/` are repository support areas rather than additional production architecture domains. Only leaves with implemented system content are materialized.
+
+The Firmware taxonomy remains `interfaces / sensors / communications / ui / buses / actuators / adapters / boards / assemblies / targets`; this project currently materializes only the leaves required by its implemented hardware path.
+
+`support/dsp-kernel` owns cross-domain numerical implementation primitives. Production ARM builds use the target DSP backend while host builds preserve deterministic semantic behavior for tests and SITL. It owns no Plant, Control, Supervisor, or Firmware semantics.
 
 ## Dependency direction
 
@@ -71,7 +75,7 @@ Control  Supervisor
      Firmware
 ```
 
-Control consumes Plant semantics. Supervisor composes Plant and Control behavior while owning estimation and authority. Firmware depends on the portable domains and owns physical realization.
+Control consumes Plant semantics. Supervisor composes Plant and Control behavior while owning estimation and authority. Firmware depends on the portable domains and owns physical realization. Production-domain crates may depend on narrowly scoped `support/` implementation primitives, but `support/` must not depend back on production-domain semantics.
 
 `firmware/adapters/estimator-input` converts Plant-owned raw ADC/encoder evidence into the Supervisor estimator input representation. `firmware/targets/stm32f103` materializes the sensing, estimation, control, actuator-model, and authority computation path without linking a physical actuator sink.
 

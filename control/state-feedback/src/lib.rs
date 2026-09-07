@@ -1,6 +1,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+use rip_dsp_kernel::dot_f32;
 use rip_robot_domain::{EstimatedState, GeneralizedDemand, StateValidity, TorqueNm};
 
 pub trait Controller {
@@ -46,10 +47,8 @@ impl Controller for LqrController {
             return Err(LqrError::InvalidState);
         }
 
-        let mut feedback = 0.0_f32;
-        for (gain, value) in self.gains.iter().zip(state.as_vector().iter()) {
-            feedback += gain * value;
-        }
+        let state_vector = state.as_vector();
+        let feedback = dot_f32(&self.gains, &state_vector);
         if !feedback.is_finite() {
             return Err(LqrError::Numeric);
         }

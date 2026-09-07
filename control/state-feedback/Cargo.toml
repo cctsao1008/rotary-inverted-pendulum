@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+rip-dsp-kernel = { path = "../../support/dsp-kernel" }
 rip-robot-domain = { path = "../../plant/robot-domain" }
 
 [lib]
