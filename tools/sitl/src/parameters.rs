@@ -135,12 +135,11 @@ mod tests {
         assert_eq!(parameters.schema, 1);
         assert_eq!(parameters.assembly, "reference-assembly");
         assert_eq!(parameters.plant.pendulum_mass_kg.value, 0.04);
-        assert_eq!(
+        assert!(
             parameters
                 .firmware_actuator_mapping
                 .positive_command_is_positive_drive
-                .value,
-            true
+                .value
         );
     }
 }
