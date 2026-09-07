@@ -45,7 +45,10 @@ mod tests {
 
     #[test]
     fn reference_assembly_maps_the_installed_motor_to_d2() {
-        assert_eq!(D2_POPULATION, MotorPopulation::Installed(ActuatorRole::RotaryArm));
+        assert_eq!(
+            D2_POPULATION,
+            MotorPopulation::Installed(ActuatorRole::RotaryArm)
+        );
         assert_eq!(D1_POPULATION, MotorPopulation::NotInstalled);
         assert_eq!(MOTOR_D2.pwm_pin.index, 1);
         assert_eq!(MOTOR_D1.pwm_pin.index, 0);
