@@ -23,6 +23,8 @@ jobs:
           targets: thumbv7m-none-eabi
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Workspace check
+        run: cargo check --workspace --exclude rip-firmware-stm32f103 --all-targets
       - name: Host tests
         run: cargo test-host
       - name: SITL deterministic skeleton
