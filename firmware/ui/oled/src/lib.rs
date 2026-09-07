@@ -226,11 +226,19 @@ impl OledRenderer {
 fn render_status(frame: &mut OledTextFrame, view: StatusView) {
     write_bytes(&mut frame.rows[0], 0, b"STATUS 1/5");
     write_label_value(&mut frame.rows[1], b"CYCLE ", cycle_name(view.cycle));
-    write_label_value(&mut frame.rows[2], b"REGIME ", regime_name(view.control_regime));
+    write_label_value(
+        &mut frame.rows[2],
+        b"REGIME ",
+        regime_name(view.control_regime),
+    );
     write_label_value(&mut frame.rows[3], b"TIMING ", health_name(view.timing));
     write_label_value(&mut frame.rows[4], b"WATCH ", health_name(view.watchdog));
     write_label_value(&mut frame.rows[5], b"AUTH ", yes_no(view.authorized));
-    write_label_value(&mut frame.rows[6], b"TELEM ", on_off(view.telemetry_enabled));
+    write_label_value(
+        &mut frame.rows[6],
+        b"TELEM ",
+        on_off(view.telemetry_enabled),
+    );
     write_bytes(&mut frame.rows[7], 0, b"M:NEXT X:BACK");
 }
 
@@ -258,7 +266,11 @@ fn render_safety(frame: &mut OledTextFrame, view: StatusView) {
 
 fn render_control(frame: &mut OledTextFrame, view: StatusView) {
     write_bytes(&mut frame.rows[0], 0, b"CONTROL 4/5");
-    write_label_value(&mut frame.rows[1], b"REGIME ", regime_name(view.control_regime));
+    write_label_value(
+        &mut frame.rows[1],
+        b"REGIME ",
+        regime_name(view.control_regime),
+    );
     write_signed(&mut frame.rows[2], b"DEM uNm ", view.demand_torque_unm);
     write_signed(&mut frame.rows[3], b"CMD ppm ", view.bounded_command_ppm);
     write_signed(&mut frame.rows[4], b"PRED uNm ", view.predicted_torque_unm);
@@ -269,9 +281,29 @@ fn render_control(frame: &mut OledTextFrame, view: StatusView) {
 
 fn render_maintenance(frame: &mut OledTextFrame, view: StatusView) {
     write_bytes(&mut frame.rows[0], 0, b"MAINT 5/5");
-    write_label_value(&mut frame.rows[1], b"MOTOR SINK ", if view.motor_sink_bound { b"BOUND" } else { b"UNBOUND" });
-    write_label_value(&mut frame.rows[2], b"D2 OUTPUT ", if view.motor_sink_bound { b"AUTH" } else { b"SAFE OFF" });
-    write_label_value(&mut frame.rows[3], b"TELEM ", on_off(view.telemetry_enabled));
+    write_label_value(
+        &mut frame.rows[1],
+        b"MOTOR SINK ",
+        if view.motor_sink_bound {
+            b"BOUND"
+        } else {
+            b"UNBOUND"
+        },
+    );
+    write_label_value(
+        &mut frame.rows[2],
+        b"D2 OUTPUT ",
+        if view.motor_sink_bound {
+            b"AUTH"
+        } else {
+            b"SAFE OFF"
+        },
+    );
+    write_label_value(
+        &mut frame.rows[3],
+        b"TELEM ",
+        on_off(view.telemetry_enabled),
+    );
     write_bytes(&mut frame.rows[4], 0, b"USER:TELEM TOGGLE");
     write_bytes(&mut frame.rows[5], 0, b"+/-:CONTRAST");
     write_bytes(&mut frame.rows[6], 0, b"SWD ACTIVE");
@@ -306,11 +338,19 @@ fn health_name(health: HealthState) -> &'static [u8] {
 }
 
 fn yes_no(value: bool) -> &'static [u8] {
-    if value { b"YES" } else { b"NO" }
+    if value {
+        b"YES"
+    } else {
+        b"NO"
+    }
 }
 
 fn on_off(value: bool) -> &'static [u8] {
-    if value { b"ON" } else { b"OFF" }
+    if value {
+        b"ON"
+    } else {
+        b"OFF"
+    }
 }
 
 fn write_label_value(row: &mut [u8; OLED_TEXT_COLUMNS], label: &[u8], value: &[u8]) {
@@ -341,7 +381,11 @@ fn write_hex32(row: &mut [u8; OLED_TEXT_COLUMNS], label: &[u8], value: u32) {
             break;
         }
         let nibble = ((value >> (shift * 4)) & 0x0f) as u8;
-        row[cursor] = if nibble < 10 { b'0' + nibble } else { b'A' + nibble - 10 };
+        row[cursor] = if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'A' + nibble - 10
+        };
     }
 }
 
@@ -413,19 +457,32 @@ const DIGIT_FONT: [[u8; 5]; 10] = [
 ];
 
 const UPPER_FONT: [[u8; 5]; 26] = [
-    [0x7e, 0x11, 0x11, 0x11, 0x7e], [0x7f, 0x49, 0x49, 0x49, 0x36],
-    [0x3e, 0x41, 0x41, 0x41, 0x22], [0x7f, 0x41, 0x41, 0x22, 0x1c],
-    [0x7f, 0x49, 0x49, 0x49, 0x41], [0x7f, 0x09, 0x09, 0x09, 0x01],
-    [0x3e, 0x41, 0x49, 0x49, 0x7a], [0x7f, 0x08, 0x08, 0x08, 0x7f],
-    [0x00, 0x41, 0x7f, 0x41, 0x00], [0x20, 0x40, 0x41, 0x3f, 0x01],
-    [0x7f, 0x08, 0x14, 0x22, 0x41], [0x7f, 0x40, 0x40, 0x40, 0x40],
-    [0x7f, 0x02, 0x0c, 0x02, 0x7f], [0x7f, 0x04, 0x08, 0x10, 0x7f],
-    [0x3e, 0x41, 0x41, 0x41, 0x3e], [0x7f, 0x09, 0x09, 0x09, 0x06],
-    [0x3e, 0x41, 0x51, 0x21, 0x5e], [0x7f, 0x09, 0x19, 0x29, 0x46],
-    [0x46, 0x49, 0x49, 0x49, 0x31], [0x01, 0x01, 0x7f, 0x01, 0x01],
-    [0x3f, 0x40, 0x40, 0x40, 0x3f], [0x1f, 0x20, 0x40, 0x20, 0x1f],
-    [0x3f, 0x40, 0x38, 0x40, 0x3f], [0x63, 0x14, 0x08, 0x14, 0x63],
-    [0x07, 0x08, 0x70, 0x08, 0x07], [0x61, 0x51, 0x49, 0x45, 0x43],
+    [0x7e, 0x11, 0x11, 0x11, 0x7e],
+    [0x7f, 0x49, 0x49, 0x49, 0x36],
+    [0x3e, 0x41, 0x41, 0x41, 0x22],
+    [0x7f, 0x41, 0x41, 0x22, 0x1c],
+    [0x7f, 0x49, 0x49, 0x49, 0x41],
+    [0x7f, 0x09, 0x09, 0x09, 0x01],
+    [0x3e, 0x41, 0x49, 0x49, 0x7a],
+    [0x7f, 0x08, 0x08, 0x08, 0x7f],
+    [0x00, 0x41, 0x7f, 0x41, 0x00],
+    [0x20, 0x40, 0x41, 0x3f, 0x01],
+    [0x7f, 0x08, 0x14, 0x22, 0x41],
+    [0x7f, 0x40, 0x40, 0x40, 0x40],
+    [0x7f, 0x02, 0x0c, 0x02, 0x7f],
+    [0x7f, 0x04, 0x08, 0x10, 0x7f],
+    [0x3e, 0x41, 0x41, 0x41, 0x3e],
+    [0x7f, 0x09, 0x09, 0x09, 0x06],
+    [0x3e, 0x41, 0x51, 0x21, 0x5e],
+    [0x7f, 0x09, 0x19, 0x29, 0x46],
+    [0x46, 0x49, 0x49, 0x49, 0x31],
+    [0x01, 0x01, 0x7f, 0x01, 0x01],
+    [0x3f, 0x40, 0x40, 0x40, 0x3f],
+    [0x1f, 0x20, 0x40, 0x20, 0x1f],
+    [0x3f, 0x40, 0x38, 0x40, 0x3f],
+    [0x63, 0x14, 0x08, 0x14, 0x63],
+    [0x07, 0x08, 0x70, 0x08, 0x07],
+    [0x61, 0x51, 0x49, 0x45, 0x43],
 ];
 
 #[cfg(test)]
