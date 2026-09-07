@@ -8,15 +8,26 @@ build = "build.rs"
 [dependencies]
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
+nb = "1"
 panic-halt = "0.2"
 rip-actuator-model = { path = "../../../plant/actuator-model" }
+rip-arm-encoder-sensor = { path = "../../sensors/arm-encoder" }
+rip-assembly-forest-d1-reference = { path = "../../assemblies/forest-d1-reference" }
+rip-board-forest-s1-d1 = { path = "../../boards/forest-s1-d1" }
 rip-control-runtime = { path = "../../../supervisor/control-runtime" }
 rip-estimator-input-adapter = { path = "../../adapters/estimator-input" }
 rip-hybrid-control = { path = "../../../control/hybrid-control" }
 rip-measurement-model = { path = "../../../plant/measurement-model" }
+rip-oled-ui = { path = "../../ui/oled" }
+rip-pendulum-adc-sensor = { path = "../../sensors/pendulum-adc" }
 rip-plant-observation = { path = "../../../plant/plant-observation" }
 rip-robot-domain = { path = "../../../plant/robot-domain" }
+rip-runtime-observation-record = { path = "../../recording/runtime-observation" }
 rip-runtime-state = { path = "../../../supervisor/runtime-state" }
+rip-software-spi = { path = "../../buses/software-spi" }
 rip-state-estimator = { path = "../../../supervisor/state-estimator" }
 rip-state-feedback = { path = "../../../control/state-feedback" }
+rip-status-view = { path = "../../ui/status" }
+rip-telemetry = { path = "../../communications/telemetry" }
+rip-timing-evidence = { path = "../../recording/timing-evidence" }
 stm32f1xx-hal = { version = "0.11.0", features = ["stm32f103", "medium"] }
