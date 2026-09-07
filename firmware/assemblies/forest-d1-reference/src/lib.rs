@@ -1,8 +1,6 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-use rip_board_forest_s1_d1::{ARM_ENCODER, MOTOR_D1, MOTOR_D2, PENDULUM_ADC};
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ActuatorRole {
     RotaryArm,
@@ -42,6 +40,7 @@ pub const fn ui_period_ticks(control_tick_hz: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rip_board_forest_s1_d1::{ARM_ENCODER, MOTOR_D1, MOTOR_D2, PENDULUM_ADC};
 
     #[test]
     fn reference_assembly_maps_the_installed_motor_to_d2() {
