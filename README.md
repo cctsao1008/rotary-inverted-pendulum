@@ -22,10 +22,10 @@ The implementation is Rust-first and `no_std`. The project shares one architectu
 
 The four canonical domains are:
 
-- **Plant** — physical state, units, measurement physics, actuator physics, and physical generalized input/output semantics.
+- **Plant** — physical state, units, dynamics, measurement physics, actuator physics, and physical generalized input/output semantics.
 - **Control** — desired closed-loop behavior: energy-based swing-up, capture/transition management, and LQR balance.
 - **Supervisor** — state estimation, runtime qualification, timing health, watchdogs, and physical-output authority.
-- **Firmware** — sensor acquisition, electrical/protocol actuation semantics, board wiring, MCU peripherals, and executable target composition.
+- **Firmware** — sensor acquisition, electrical/protocol actuation semantics, board wiring, buses, communications, UI, recording, MCU peripherals, and executable target composition.
 
 ## Typed semantic path
 
@@ -58,7 +58,7 @@ The STM32F103 executable materializes the non-actuating computation path through
 ```text
 TIM1 / 1 kHz control opportunity
     ↓
-PA7 / ADC1 + PA0/PA1 / TIM2 + DWT timestamp
+PendulumAdcSensor + Arm Encoder / DWT timestamp
     ↓
 RawObservation
     ↓
@@ -83,18 +83,24 @@ BoundedActuatorCommand
     ↓
 RuntimeAuthority::evaluate
     ↓
-AuthorityDecision + debugger-visible shadow data
+AuthorityDecision
 ```
 
-TIM1 provides a fixed 1 kHz control opportunity. The hardware update flag is not treated as a backlog queue: one observed update admits at most one fresh acquisition/control cycle, and missed periods are not replayed. DWT/`MonoTimer` remains the independent monotonic timing source used for timing evidence.
+TIM1 provides a fixed 1 kHz control opportunity. The hardware update flag is not treated as a backlog queue: one observed update admits at most one fresh acquisition/control cycle, and missed periods are not replayed. DWT/`MonoTimer` remains the independent monotonic timing source.
 
-The target includes on-target runtime timing characterization. Debugger-visible counters expose admitted-cycle count and elapsed time, last/min/max admission period, maximum period jitter relative to the nearest 1 kHz slot, maximum TIM1 admission phase, last/max end-to-end execution time, maximum execution cycles, inferred coalesced/missed ticks, deadline overruns, Supervisor late/timeout counts, ADC errors, and runtime errors. Execution timing covers the admitted sensing → estimation → hybrid control → actuator-model → authority path and its shadow publication.
+`firmware/recording/runtime-observation` publishes the canonical live runtime snapshot. `firmware/recording/timing-evidence` records admitted-cycle count and elapsed time, last/min/max admission period, maximum period jitter relative to the nearest 1 kHz slot, maximum TIM1 admission phase, last/max end-to-end execution time, maximum execution cycles, inferred coalesced/missed ticks, deadline overruns, Supervisor late/timeout counts, ADC errors, and runtime errors. Critical-path timing ends before UART and OLED background service.
 
-The target also enables the STM32 independent watchdog (`IWDG`) with a 100 ms timeout. It is fed after each admitted opportunity is serviced, so a stalled firmware loop resets the MCU independently of TIM1 and DWT. Boot re-establishes the D2 motor channel in hard safe-off.
+The target enables the STM32 independent watchdog (`IWDG`) with a 100 ms timeout. It is fed after each admitted opportunity is serviced, so a stalled firmware loop resets the MCU independently of TIM1 and DWT. Boot re-establishes the D2 motor channel in hard safe-off.
 
 `RuntimeAuthority` remains disarmed and the runtime remains `Ready`, so this executable cannot produce closed-loop `AuthorizedActuation`.
 
 The installed D2 motor channel is concretely bound in a hard safe-off state at boot: PB1/TIM3_CH4 is configured for 20 kHz PWM with zero duty, and PB13/PB12 are driven low. No runtime `ActuationSink` owns these peripherals, so control computation cannot reach the physical motor.
+
+## Local telemetry and UI
+
+The reference board exposes USART1 on PA9/PA10 at 115200 baud. `firmware/communications/telemetry` publishes a fixed-size runtime packet with sequence, state, control, safety, and timing evidence plus CRC16. Telemetry is latest-snapshot only: a busy transport drops that publication opportunity rather than replaying stale backlog. The reference assembly defaults telemetry off and publishes at 10 Hz when enabled.
+
+The local display is an SSD1315 128×64 module using write-only software SPI on PB5/PB4 with PB3 reset and PA15 D/C. JTAG is disabled to reclaim PA15/PB3/PB4 while SWD remains on PA13/PA14. `firmware/ui/status` defines the `STATUS`, `SENSOR`, `SAFETY`, `CONTROL`, and `MAINTENANCE` pages plus M/X/+/-/USER key semantics. `firmware/ui/oled` owns the 1024-byte framebuffer, dirty-page rendering, and bounded background flush. Physical display service is limited to 8 data bytes per background slice.
 
 ## Rotary plant semantics
 
@@ -187,7 +193,7 @@ Drive frames cannot be publicly constructed. `Tb6612Output` owns the frame backe
 
 `Tb6612PwmDirIo` is the generic PWM/direction backend implementation and performs break-before-make: PWM is forced to zero before direction pins change, then the requested duty is applied. A target may provide another `Tb6612FrameIo` implementation without changing the authority semantics.
 
-The STM32F103 executable still does not instantiate a runtime `Tb6612Output` or hand its concrete D2 motor peripherals to an actuation sink.
+The STM32F103 executable does not instantiate a runtime `Tb6612Output` or hand its concrete D2 motor peripherals to an actuation sink.
 
 ## Reference-backed nominal live-shadow parameters
 
@@ -207,25 +213,42 @@ The live-shadow swing-up model uses the same reference family for pendulum mass,
 
 ```text
 plant/
-├── robot-domain/             Physical state, units, and generalized demand
-├── plant-observation/        Raw observation semantics
-├── measurement-model/        ADC/encoder measurement physics
-└── actuator-model/           Static and speed-aware actuator models
+├── robot-domain/                  Physical state, units, generalized demand
+├── dynamics-model/                Furuta dynamics and integration semantics
+├── measurement-model/             ADC/encoder measurement physics
+├── plant-observation/             Raw observation semantics
+└── actuator-model/                Static and speed-aware actuator models
 
 control/
-├── state-feedback/           Controller contract and LQR
-└── hybrid-control/           Energy swing-up, capture policy, LQR transition
+├── state-feedback/                Controller contract and LQR
+└── hybrid-control/                Energy swing-up, capture policy, LQR transition
 
 supervisor/
-├── state-estimator/          Estimator input contract and state estimation
-├── runtime-state/            Runtime policy, timing, watchdog, authority
-└── control-runtime/          Deterministic portable control composition
+├── state-estimator/               Estimator input contract and state estimation
+├── runtime-state/                 Runtime policy, timing, watchdog, authority
+└── control-runtime/               Deterministic portable control composition
 
 firmware/
-├── interfaces/actuation/     Authorized physical-output contract
-├── actuators/tb6612/         TB6612 mapper, proof-gated sink, frame-I/O boundary
-├── adapters/estimator-input/ Raw observation -> estimator input promotion
-└── targets/stm32f103/        1 kHz live-shadow, timing characterization, IWDG, hard-safe-off D2 binding
+├── interfaces/actuation/          Authorized physical-output contract
+├── sensors/
+│   ├── pendulum-adc/              Raw pendulum ADC acquisition boundary
+│   └── arm-encoder/               QEI counter accumulation and raw observation
+├── communications/telemetry/      Latest-snapshot runtime telemetry protocol
+├── ui/
+│   ├── status/                    Status pages and key semantics
+│   └── oled/                      SSD1315 framebuffer and bounded flush
+├── buses/software-spi/             Write-only OLED transport
+├── actuators/tb6612/              TB6612 mapper, proof-gated sink, frame-I/O boundary
+├── adapters/estimator-input/      Raw observation -> estimator input promotion
+├── boards/forest-s1-d1/           Board pin/peripheral wiring
+├── assemblies/forest-d1-reference/ Populated-device roles and local-service rates
+├── recording/
+│   ├── runtime-observation/       Canonical runtime snapshot
+│   └── timing-evidence/           Runtime timing characterization
+└── targets/stm32f103/             MCU composition, IWDG, telemetry/UI, hard-safe-off D2
+
+support/
+└── dsp-kernel/                    Cross-domain numerical implementation primitives
 ```
 
 ## Reference-backed nominal parameters
