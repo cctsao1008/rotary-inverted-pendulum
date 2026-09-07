@@ -33,10 +33,7 @@ pub struct TelemetrySnapshot {
 }
 
 impl TelemetrySnapshot {
-    pub fn from_records(
-        runtime: RuntimeRecordSnapshot,
-        timing: TimingEvidenceSnapshot,
-    ) -> Self {
+    pub fn from_records(runtime: RuntimeRecordSnapshot, timing: TimingEvidenceSnapshot) -> Self {
         Self {
             timestamp_us_low: runtime.timestamp_us_low,
             sample_index: runtime.sample_index,
@@ -55,9 +52,8 @@ impl TelemetrySnapshot {
             demand_torque_unm: runtime.demand_torque_unm,
             bounded_command_ppm: runtime.bounded_command_ppm,
             predicted_torque_unm: runtime.predicted_torque_unm,
-            inferred_missed_ticks: timing
-                .inferred_missed_tick_count
-                .min(u32::from(u16::MAX)) as u16,
+            inferred_missed_ticks: timing.inferred_missed_tick_count.min(u32::from(u16::MAX))
+                as u16,
         }
     }
 }
@@ -287,6 +283,9 @@ mod tests {
         assert_eq!(publisher.stats().dropped_busy, 1);
         let transport = publisher.into_transport();
         assert_eq!(transport.packets.len(), 1);
-        assert_eq!(u32::from_le_bytes(transport.packets[0][12..16].try_into().unwrap()), 2);
+        assert_eq!(
+            u32::from_le_bytes(transport.packets[0][12..16].try_into().unwrap()),
+            2
+        );
     }
 }
