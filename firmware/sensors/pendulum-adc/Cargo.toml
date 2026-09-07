@@ -1,0 +1,12 @@
+[package]
+name = "rip-pendulum-adc-sensor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rip-plant-observation = { path = "../../../plant/plant-observation" }
+rip-robot-domain = { path = "../../../plant/robot-domain" }
+
+[lib]
+path = "src/lib.rs"
