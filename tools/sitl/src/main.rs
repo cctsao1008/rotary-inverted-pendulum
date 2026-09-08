@@ -31,7 +31,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let cli =
         parse_cli().map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     let scenario = Scenario::load(&cli.scenario)?;
-    let base_context = RunContext::stage1(cli.system_identifier, cli.git_commit);
+    let base_context = RunContext::scheduler_only(cli.system_identifier, cli.git_commit);
 
     let (context, artifacts, mode) = if let Some(rotary) = scenario.rotary {
         let parameters = ReferenceAssemblyParameters::load(&cli.parameters)?;
