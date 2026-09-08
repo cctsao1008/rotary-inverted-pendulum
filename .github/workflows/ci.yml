@@ -21,21 +21,37 @@ jobs:
         with:
           components: rustfmt, clippy
           targets: thumbv7m-none-eabi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Format
         run: cargo fmt --all -- --check
       - name: Workspace check
         run: cargo check --workspace --exclude rip-firmware-stm32f103 --all-targets
       - name: Host tests
         run: cargo test-host
+      - name: Install model correlation dependencies
+        run: python -m pip install --disable-pip-version-check -r tools/model/requirements.txt
+      - name: Independent Furuta model correlation
+        run: |
+          rm -rf target/model-correlation
+          cargo run -p rip-sitl --release --bin plant_reference_trace -- \
+            --fixture tools/model/fixtures/reference_nominal_correlation.json \
+            --output target/model-correlation/rust-trace.json
+          python tools/model/reference_furuta.py \
+            --fixture tools/model/fixtures/reference_nominal_correlation.json \
+            --rust-trace target/model-correlation/rust-trace.json \
+            --summary target/model-correlation/summary.json \
+            --max-abs-error 2e-4
       - name: SITL deterministic skeleton
         run: |
           rm -rf target/sitl-run-a target/sitl-run-b
-          cargo run -p rip-sitl --release -- \
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/deterministic_smoke.toml \
             --output target/sitl-run-a \
             --system-identifier rotary-inverted-pendulum \
             --git-commit "$GITHUB_SHA"
-          cargo run -p rip-sitl --release -- \
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/deterministic_smoke.toml \
             --output target/sitl-run-b \
             --system-identifier rotary-inverted-pendulum \
@@ -46,13 +62,13 @@ jobs:
       - name: Rotary full semantic-path SITL
         run: |
           rm -rf target/sitl-balance-a target/sitl-balance-b target/sitl-swingup
-          cargo run -p rip-sitl --release -- \
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_balance.toml \
             --parameters parameters/reference-assembly.json \
             --output target/sitl-balance-a \
             --system-identifier rotary-inverted-pendulum \
             --git-commit "$GITHUB_SHA"
-          cargo run -p rip-sitl --release -- \
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_balance.toml \
             --parameters parameters/reference-assembly.json \
             --output target/sitl-balance-b \
@@ -61,7 +77,7 @@ jobs:
           cmp target/sitl-balance-a/manifest.json target/sitl-balance-b/manifest.json
           cmp target/sitl-balance-a/trace.jsonl target/sitl-balance-b/trace.jsonl
           cmp target/sitl-balance-a/summary.json target/sitl-balance-b/summary.json
-          cargo run -p rip-sitl --release -- \
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_swingup.toml \
             --parameters parameters/reference-assembly.json \
             --output target/sitl-swingup \

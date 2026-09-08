@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "description": "Reference-backed nominal nonlinear Furuta implementation-correlation fixture; not Forest D1 specimen calibration.",
+  "sample_period_us": 1000,
+  "integration_step_us": 50,
+  "duration_us": 250000,
+  "plant": {
+    "pendulum_mass_kg": 0.04,
+    "arm_length_m": 0.085,
+    "pendulum_com_length_m": 0.129,
+    "arm_inertia_kg_m2": 0.0000057,
+    "pendulum_inertia_kg_m2": 0.0001,
+    "gravity_m_s2": 9.81,
+    "arm_viscous_damping_nm_per_rad_s": 0.00021,
+    "pendulum_viscous_damping_nm_per_rad_s": 0.0
+  },
+  "initial_state": [2.8, 0.3, 0.1, -0.2],
+  "input_profile": [
+    { "at_us": 0, "arm_torque_nm": 0.0 },
+    { "at_us": 50000, "arm_torque_nm": 0.012 },
+    { "at_us": 120000, "arm_torque_nm": -0.018 },
+    { "at_us": 200000, "arm_torque_nm": 0.007 }
+  ]
+}
