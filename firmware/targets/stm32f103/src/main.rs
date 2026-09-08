@@ -34,7 +34,7 @@ use rip_runtime_observation_record::{
 use rip_runtime_state::{ControlWatchdog, RuntimeLimits, SensorTimingLimits, SensorTimingMonitor};
 use rip_software_spi::{OutputLine, SoftwareSpi};
 use rip_state_estimator::EstimatorConfig;
-use rip_state_feedback::LqrController;
+use rip_state_feedback::{LqrController, QNET_REFERENCE_TORQUE_GAINS};
 use rip_status_view::{
     KeyService, LocalUi, StatusView, KEY_MINUS_MASK, KEY_M_MASK, KEY_PLUS_MASK, KEY_USER_MASK,
     KEY_X_MASK,
@@ -71,7 +71,6 @@ const UART_BACKGROUND_SERVICE_BYTES: usize = 8;
 
 // Reference-backed live-shadow controller parameters from the QNET RIP model
 // in Abdullah et al. (2021). These are not Forest D1 specimen calibration.
-const SHADOW_LQR_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, 0.011_20, 0.007_66];
 const SHADOW_PENDULUM_MASS_KG: f32 = 0.04;
 const SHADOW_PENDULUM_COM_LENGTH_M: f32 = 0.129;
 const SHADOW_PENDULUM_INERTIA_KG_M2: f32 = 0.0001;
@@ -359,7 +358,7 @@ fn main() -> ! {
         max_gap_us: ESTIMATOR_MAX_GAP_US,
         rate_filter_alpha: ESTIMATOR_RATE_FILTER_ALPHA,
     };
-    let balance_controller = LqrController::new(SHADOW_LQR_TORQUE_GAINS).unwrap();
+    let balance_controller = LqrController::new(QNET_REFERENCE_TORQUE_GAINS).unwrap();
     let swing_up_controller = EnergySwingUpController::new(EnergySwingUpConfig {
         pendulum_mass_kg: SHADOW_PENDULUM_MASS_KG,
         pendulum_com_length_m: SHADOW_PENDULUM_COM_LENGTH_M,
