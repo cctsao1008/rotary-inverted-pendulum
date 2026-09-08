@@ -30,6 +30,8 @@ jobs:
         run: cargo check --workspace --exclude rip-firmware-stm32f103 --all-targets
       - name: Host tests
         run: cargo test-host
+      - name: Parameter provenance consistency
+        run: python tools/model/check_parameter_provenance.py
       - name: Install model correlation dependencies
         run: python -m pip install --disable-pip-version-check -r tools/model/requirements.txt
       - name: Independent Furuta model correlation
