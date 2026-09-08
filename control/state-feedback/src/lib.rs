@@ -4,6 +4,17 @@
 use rip_dsp_kernel::dot_f32;
 use rip_robot_domain::{EstimatedState, GeneralizedDemand, StateValidity, TorqueNm};
 
+/// Reference-backed QNET RIP LQR gains expressed in the project's canonical
+/// state order `[theta, theta_dot, phi, phi_dot]` and arm-torque domain.
+///
+/// Abdullah et al. (2021) report voltage-domain gains in order
+/// `[phi, theta, phi_dot, theta_dot]` as `[-2.24, 36.71, -1.49, 3.17]`
+/// with `V = -Kx`. Reordering and multiplying by `Kt / Rm = 0.042 / 8.4`
+/// gives this torque-feedback vector. It is a nominal reference profile, not
+/// Forest D1 specimen calibration.
+pub const QNET_REFERENCE_TORQUE_GAINS: [f32; 4] =
+    [0.183_55, 0.015_85, -0.011_20, -0.007_45];
+
 pub trait Controller {
     type Error;
 
@@ -79,6 +90,14 @@ mod tests {
         assert_eq!(
             controller.compute(&state).unwrap().arm_torque,
             TorqueNm(-51.0)
+        );
+    }
+
+    #[test]
+    fn qnet_reference_profile_has_canonical_project_order_and_signs() {
+        assert_eq!(
+            QNET_REFERENCE_TORQUE_GAINS,
+            [0.183_55, 0.015_85, -0.011_20, -0.007_45]
         );
     }
 
