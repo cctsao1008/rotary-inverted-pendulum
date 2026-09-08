@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "registry": "parameters/reference-assembly.json",
+  "sources": {
+    "abdullah_2021_qnet": {
+      "kind": "publication",
+      "title": "Swing up and stabilization control of rotary inverted pendulum based on energy balance, fuzzy logic, and LQR controllers",
+      "sha256": "2f32b0cabd0c89aed70e462d47bebaf954ceaa1f591d030119aec942686fb97b"
+    },
+    "forest_d1_kit_manual": {
+      "kind": "vendor_documentation",
+      "title": "Forest D1 旋转倒立摆套件使用说明",
+      "sha256": "fbf37c58842fcd05a7d9513121fc20281caf4607def7f9e7aa34db78cde22a0c"
+    },
+    "forest_d1_source_guide": {
+      "kind": "vendor_documentation",
+      "title": "Forest D1 旋转倒立摆源码开发说明",
+      "sha256": "19efcf6fc35b1a6ae1d5aab9fb293dc48c1e6dd52811d3a80ac344ceccfb2e84"
+    },
+    "forest_d1_baseboard_schematic": {
+      "kind": "vendor_schematic",
+      "title": "Forest D1倒立摆底板",
+      "sha256": "9951a8ebc8d342b6af2fcf24c9ad0464bc052678332546bf0d6c0cf8f99335a3"
+    }
+  },
+  "parameters": {
+    "plant.pendulum_mass_kg": {
+      "evidence_class": "reference_nominal",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "QNET RIP reference parameter Mp = 0.04 kg."
+    },
+    "plant.arm_length_m": {
+      "evidence_class": "reference_nominal",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "QNET RIP reference parameter Lr = 0.085 m."
+    },
+    "plant.pendulum_com_length_m": {
+      "evidence_class": "reference_nominal",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "QNET RIP reference parameter Lp = 0.129 m."
+    },
+    "plant.arm_inertia_kg_m2": {
+      "evidence_class": "reference_nominal",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "QNET RIP reference equivalent arm inertia Jeq = 5.7e-6 kg*m^2."
+    },
+    "plant.pendulum_inertia_kg_m2": {
+      "evidence_class": "reference_nominal",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "QNET RIP reference pendulum inertia Jp = 1.0e-4 kg*m^2."
+    },
+    "plant.gravity_m_s2": {
+      "evidence_class": "standard_constant",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_specific",
+      "rationale": "Standard gravitational acceleration value used by the reference model."
+    },
+    "plant.arm_viscous_damping_nm_per_rad_s": {
+      "evidence_class": "derived_reference",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "Derived from the reference motor constants Kt = Ke = 0.042 and Rm = 8.4 as Kt*Ke/Rm."
+    },
+    "plant.pendulum_viscous_damping_nm_per_rad_s": {
+      "evidence_class": "model_assumption",
+      "evidence_refs": [],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "Zero damping is an explicit nominal model assumption."
+    },
+    "measurement_model.pendulum_upright_adc": {
+      "evidence_class": "project_reference",
+      "evidence_refs": [],
+      "specimen_status": "project_reference_only",
+      "rationale": "Reference upright count used by the current implementation; not a specimen calibration measurement."
+    },
+    "measurement_model.pendulum_radians_per_count": {
+      "evidence_class": "model_assumption",
+      "evidence_refs": ["forest_d1_source_guide"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "The vendor path confirms ADC-based angle acquisition; the current 2*pi/4096 angular scale remains a nominal mapping assumption."
+    },
+    "measurement_model.pendulum_direction": {
+      "evidence_class": "project_convention",
+      "evidence_refs": [],
+      "specimen_status": "project_reference_only",
+      "rationale": "Positive pendulum-angle sign convention used by the project."
+    },
+    "measurement_model.arm_encoder_counts_per_revolution": {
+      "evidence_class": "vendor_documented",
+      "evidence_refs": ["forest_d1_kit_manual"],
+      "specimen_status": "hardware_family_documented",
+      "rationale": "Vendor manual specifies 13-line Hall encoder, 1:20 reduction, 260 pulses per output revolution and 1040 counts after x4 quadrature."
+    },
+    "measurement_model.arm_encoder_direction": {
+      "evidence_class": "project_convention",
+      "evidence_refs": [],
+      "specimen_status": "project_reference_only",
+      "rationale": "Positive arm-angle sign convention used by the project; physical sign still requires specimen observation."
+    },
+    "virtual_sensor.pendulum_upright_adc": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": [],
+      "specimen_status": "simulation_only",
+      "derived_from": ["measurement_model.pendulum_upright_adc"],
+      "rationale": "Virtual sensor intentionally mirrors the production reference offset."
+    },
+    "virtual_sensor.pendulum_radians_per_count": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": [],
+      "specimen_status": "simulation_only",
+      "derived_from": ["measurement_model.pendulum_radians_per_count"],
+      "rationale": "Virtual sensor nominally mirrors the production angular scale."
+    },
+    "virtual_sensor.pendulum_direction": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": [],
+      "specimen_status": "simulation_only",
+      "derived_from": ["measurement_model.pendulum_direction"],
+      "rationale": "Virtual sensor uses the same nominal sign convention as the production measurement model."
+    },
+    "virtual_sensor.pendulum_adc_modulus": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": ["forest_d1_source_guide"],
+      "specimen_status": "simulation_only",
+      "rationale": "Virtual device-like ADC evidence uses the STM32F1 12-bit/4096-count nominal range."
+    },
+    "virtual_sensor.arm_encoder_counts_per_revolution": {
+      "evidence_class": "vendor_documented",
+      "evidence_refs": ["forest_d1_kit_manual"],
+      "specimen_status": "hardware_family_documented",
+      "derived_from": ["measurement_model.arm_encoder_counts_per_revolution"],
+      "rationale": "Virtual encoder mirrors the vendor-documented 1040-count output-shaft quadrature convention."
+    },
+    "virtual_sensor.arm_encoder_direction": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": [],
+      "specimen_status": "simulation_only",
+      "derived_from": ["measurement_model.arm_encoder_direction"],
+      "rationale": "Virtual encoder mirrors the production sign convention."
+    },
+    "production_actuator_model.torque_per_effective_command_nm": {
+      "evidence_class": "derived_reference",
+      "evidence_refs": ["abdullah_2021_qnet"],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "Reference static torque span derived from Kt/Rm and the nominal +/-10 V control range."
+    },
+    "production_actuator_model.command_deadzone": {
+      "evidence_class": "model_assumption",
+      "evidence_refs": [],
+      "specimen_status": "not_specimen_calibrated",
+      "rationale": "Zero normalized-command deadzone is an explicit production-model assumption."
+    },
+    "firmware_actuator_mapping.positive_command_is_positive_drive": {
+      "evidence_class": "project_convention",
+      "evidence_refs": ["forest_d1_baseboard_schematic"],
+      "specimen_status": "project_reference_only",
+      "rationale": "The board schematic establishes the TB6612 channel wiring; the positive-command mapping remains a project sign convention."
+    },
+    "virtual_physical_actuator.torque_per_duty_nm": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": [],
+      "specimen_status": "simulation_only",
+      "derived_from": ["production_actuator_model.torque_per_effective_command_nm"],
+      "rationale": "Nominal virtual physical truth intentionally starts from the same static torque span while remaining independently configurable."
+    },
+    "virtual_physical_actuator.positive_drive_is_positive_arm_torque": {
+      "evidence_class": "simulation_fixture",
+      "evidence_refs": [],
+      "specimen_status": "simulation_only",
+      "rationale": "Virtual physical actuator sign convention for the nominal SITL fixture."
+    }
+  }
+}
