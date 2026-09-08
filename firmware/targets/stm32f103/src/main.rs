@@ -4,7 +4,7 @@
 
 use core::f32::consts::PI;
 
-use cortex_m::{asm, peripheral::DWT};
+use cortex_m::asm;
 use cortex_m_rt::entry;
 use panic_halt as _;
 use rip_actuator_model::{ArmActuatorModel, ArmActuatorParameters};
