@@ -87,8 +87,10 @@ fn validate_fixture(fixture: &Fixture) -> Result<(), String> {
     }
     if fixture.sample_period_us == 0
         || fixture.integration_step_us == 0
-        || fixture.duration_us % fixture.sample_period_us != 0
-        || fixture.sample_period_us % fixture.integration_step_us != 0
+        || !fixture.duration_us.is_multiple_of(fixture.sample_period_us)
+        || !fixture
+            .sample_period_us
+            .is_multiple_of(fixture.integration_step_us)
     {
         return Err("duration/sample/integration periods must form an integer grid".to_owned());
     }
@@ -98,7 +100,7 @@ fn validate_fixture(fixture: &Fixture) -> Result<(), String> {
     let mut previous = None;
     for event in &fixture.input_profile {
         if event.at_us > fixture.duration_us
-            || event.at_us % fixture.sample_period_us != 0
+            || !event.at_us.is_multiple_of(fixture.sample_period_us)
             || !event.arm_torque_nm.is_finite()
             || previous.is_some_and(|value| event.at_us <= value)
         {
@@ -146,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             profile_index += 1;
         }
 
-        if at_us % fixture.sample_period_us == 0 {
+        if at_us.is_multiple_of(fixture.sample_period_us) {
             samples.push(TraceSample {
                 time_us: at_us,
                 state: state_array(plant.state()),
