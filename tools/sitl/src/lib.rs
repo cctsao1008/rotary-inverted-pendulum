@@ -29,12 +29,15 @@ pub struct RunContext {
 }
 
 impl RunContext {
-    pub fn stage1(system_identifier: impl Into<String>, git_commit: impl Into<String>) -> Self {
+    pub fn scheduler_only(
+        system_identifier: impl Into<String>,
+        git_commit: impl Into<String>,
+    ) -> Self {
         Self {
             system_identifier: system_identifier.into(),
             git_commit: git_commit.into(),
-            production_model_configuration: json!({"mode": "not-materialized"}),
-            virtual_physical_truth_configuration: json!({"mode": "not-materialized"}),
+            production_model_configuration: json!({"mode": "scheduler-only"}),
+            virtual_physical_truth_configuration: json!({"mode": "scheduler-only"}),
         }
     }
 
@@ -260,7 +263,7 @@ mod tests {
     }
 
     fn context() -> RunContext {
-        RunContext::stage1("rotary-inverted-pendulum", "test-commit")
+        RunContext::scheduler_only("rotary-inverted-pendulum", "test-commit")
     }
 
     #[test]
@@ -273,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_preserves_production_and_physical_truth_provenance() {
+    fn manifest_preserves_scheduler_only_provenance() {
         let artifacts = execute(&context(), &deterministic_scenario()).unwrap();
         let manifest: serde_json::Value = serde_json::from_str(&artifacts.manifest_json).unwrap();
 
@@ -281,11 +284,11 @@ mod tests {
         assert_eq!(manifest["git_commit"], "test-commit");
         assert_eq!(
             manifest["production_model_configuration"]["mode"],
-            "not-materialized"
+            "scheduler-only"
         );
         assert_eq!(
             manifest["virtual_physical_truth_configuration"]["mode"],
-            "not-materialized"
+            "scheduler-only"
         );
     }
 
