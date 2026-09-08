@@ -25,7 +25,7 @@ use rip_runtime_state::{
     SensorTimingLimits, SensorTimingMonitor,
 };
 use rip_state_estimator::EstimatorConfig;
-use rip_state_feedback::LqrController;
+use rip_state_feedback::{LqrController, QNET_REFERENCE_TORQUE_GAINS};
 use rip_tb6612_actuation::{
     Tb6612BridgeMode, Tb6612ElectricalActuation, Tb6612FrameIo, Tb6612Mapper, Tb6612Output,
 };
@@ -39,10 +39,6 @@ use crate::SitlSystem;
 
 const ESTIMATOR_RATE_FILTER_ALPHA: f32 = 1.0;
 
-// Abdullah et al. (2021) use state order [phi, theta, phi_dot, theta_dot]
-// and K=[-2.24, 36.71, -1.49, 3.17] in V=-Kx. Reordering to this project's
-// [theta, theta_dot, phi, phi_dot] and scaling by Kt/Rm=0.005 Nm/V gives:
-const LQR_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, -0.011_20, -0.007_45];
 const TARGET_ENERGY_J: f32 = 0.025;
 const ENERGY_TORQUE_GAIN: f32 = 0.175;
 const MAX_ABS_TORQUE_NM: f32 = 0.05;
@@ -618,7 +614,7 @@ impl SitlSystem for RotarySitlSystem {
 }
 
 fn hybrid_controller(parameters: FurutaParameters) -> Result<HybridController, Box<dyn Error>> {
-    let balance = LqrController::new(LQR_TORQUE_GAINS)
+    let balance = LqrController::new(QNET_REFERENCE_TORQUE_GAINS)
         .map_err(|error| boxed(format!("LQR setup: {error:?}")))?;
     let swing = EnergySwingUpController::new(EnergySwingUpConfig {
         pendulum_mass_kg: parameters.pendulum_mass_kg,
