@@ -73,7 +73,7 @@
     "arm_encoder_counts_per_revolution": {
       "value": 1040.0,
       "unit": "count/rev",
-      "source": "project reference encoder configuration",
+      "source": "Forest D1 vendor manual: 13-line Hall encoder, 1:20 reduction, 260 pulses/rev, x4 quadrature = 1040 counts/rev",
       "applicability": "production RawObservation to EstimatorMeasurement mapping"
     },
     "arm_encoder_direction": {
@@ -111,7 +111,7 @@
     "arm_encoder_counts_per_revolution": {
       "value": 1040.0,
       "unit": "count/rev",
-      "source": "reference-assembly nominal sensor truth",
+      "source": "Forest D1 vendor-manual encoder scale mirrored by the nominal virtual sensor",
       "applicability": "SITL virtual arm encoder"
     },
     "arm_encoder_direction": {
