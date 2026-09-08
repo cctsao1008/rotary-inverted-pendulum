@@ -736,7 +736,7 @@ mod tests {
             scenario.runtime_period_us,
         )
         .unwrap();
-        let context = RunContext::stage1("rotary-inverted-pendulum", "test")
+        let context = RunContext::scheduler_only("rotary-inverted-pendulum", "test")
             .with_model_configurations(
                 parameters.production_model_configuration(),
                 parameters.virtual_physical_truth_configuration(),
