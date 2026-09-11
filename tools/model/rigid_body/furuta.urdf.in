@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot name="qnet_reference_furuta">
+  <!-- Generated from reference-backed nominal parameters. -->
+  <!-- This model is simulation evidence only; it is not Forest D1 specimen calibration. -->
+
+  <link name="base"/>
+
+  <link name="arm_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="{arm_carrier_mass_kg}"/>
+      <inertia ixx="{inertia_floor_kg_m2}" ixy="0" ixz="0"
+               iyy="{inertia_floor_kg_m2}" iyz="0" izz="{arm_inertia_kg_m2}"/>
+    </inertial>
+  </link>
+
+  <joint name="arm_joint" type="continuous">
+    <parent link="base"/>
+    <child link="arm_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="{arm_viscous_damping_nm_per_rad_s}" friction="0"/>
+  </joint>
+
+  <link name="pendulum_link">
+    <inertial>
+      <origin xyz="0 0 {pendulum_com_length_m}" rpy="0 0 0"/>
+      <mass value="{pendulum_mass_kg}"/>
+      <inertia ixx="{pendulum_inertia_kg_m2}" ixy="0" ixz="0"
+               iyy="{inertia_floor_kg_m2}" iyz="0" izz="{inertia_floor_kg_m2}"/>
+    </inertial>
+  </link>
+
+  <joint name="pendulum_joint" type="continuous">
+    <parent link="arm_link"/>
+    <child link="pendulum_link"/>
+    <origin xyz="{arm_length_m} 0 0" rpy="0 0 0"/>
+    <axis xyz="-1 0 0"/>
+    <dynamics damping="{pendulum_viscous_damping_nm_per_rad_s}" friction="0"/>
+  </joint>
+</robot>
