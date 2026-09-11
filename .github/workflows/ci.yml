@@ -124,7 +124,7 @@ jobs:
           cmp target/model-rigid-body/pybullet-trace-a.json target/model-rigid-body/pybullet-trace-b.json
       - name: Rigid-body causality contract
         run: python tools/model/rigid_body/check_causality.py
-      - name: Three-way model difference characterization
+      - name: Three-way nominal model difference characterization
         run: |
           cargo run -p rip-sitl --release --bin plant_reference_trace -- \
             --fixture tools/model/fixtures/reference_nominal_correlation.json \
@@ -134,3 +134,16 @@ jobs:
             --rust-trace target/model-rigid-body/rust-trace.json \
             --pybullet-trace target/model-rigid-body/pybullet-trace-a.json \
             --summary target/model-rigid-body/three-way-summary.json
+      - name: Three-way near-upright small-signal characterization
+        run: |
+          python tools/model/rigid_body/pybullet_furuta.py \
+            --fixture tools/model/fixtures/reference_nominal_small_signal.json \
+            --output target/model-rigid-body/pybullet-small-signal.json
+          cargo run -p rip-sitl --release --bin plant_reference_trace -- \
+            --fixture tools/model/fixtures/reference_nominal_small_signal.json \
+            --output target/model-rigid-body/rust-small-signal.json
+          python tools/model/rigid_body/compare_three_way.py \
+            --fixture tools/model/fixtures/reference_nominal_small_signal.json \
+            --rust-trace target/model-rigid-body/rust-small-signal.json \
+            --pybullet-trace target/model-rigid-body/pybullet-small-signal.json \
+            --summary target/model-rigid-body/three-way-small-signal-summary.json
