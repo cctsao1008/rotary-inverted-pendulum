@@ -104,7 +104,8 @@ jobs:
             tools/model/rigid_body/build_furuta_urdf.py \
             tools/model/rigid_body/pybullet_furuta.py \
             tools/model/rigid_body/check_causality.py \
-            tools/model/rigid_body/compare_three_way.py
+            tools/model/rigid_body/compare_three_way.py \
+            tools/model/rigid_body/diagnose_dynamics_gap.py
       - name: Build nominal Furuta URDF contract
         run: |
           rm -rf target/model-rigid-body
@@ -147,3 +148,5 @@ jobs:
             --rust-trace target/model-rigid-body/rust-small-signal.json \
             --pybullet-trace target/model-rigid-body/pybullet-small-signal.json \
             --summary target/model-rigid-body/three-way-small-signal-summary.json
+      - name: Localize analytical versus rigid-body dynamics gap
+        run: python tools/model/rigid_body/diagnose_dynamics_gap.py
