@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "description": "Reference-backed nominal near-upright small-signal Furuta fixture for analytical versus rigid-body structure comparison; not Forest D1 specimen calibration.",
+  "sample_period_us": 1000,
+  "integration_step_us": 50,
+  "duration_us": 100000,
+  "plant": {
+    "pendulum_mass_kg": 0.04,
+    "arm_length_m": 0.085,
+    "pendulum_com_length_m": 0.129,
+    "arm_inertia_kg_m2": 0.0000057,
+    "pendulum_inertia_kg_m2": 0.0001,
+    "gravity_m_s2": 9.81,
+    "arm_viscous_damping_nm_per_rad_s": 0.00021,
+    "pendulum_viscous_damping_nm_per_rad_s": 0.0
+  },
+  "initial_state": [0.02, 0.0, 0.0, 0.0],
+  "input_profile": [
+    { "at_us": 0, "arm_torque_nm": 0.0 },
+    { "at_us": 20000, "arm_torque_nm": 0.0002 },
+    { "at_us": 40000, "arm_torque_nm": -0.0002 },
+    { "at_us": 60000, "arm_torque_nm": 0.0 }
+  ]
+}
