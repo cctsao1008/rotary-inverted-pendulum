@@ -255,9 +255,13 @@ support/
 
 Physical and model parameters may use **reference-backed nominal values** when a project-specific value is not part of the implemented system definition. A nominal parameter carries a value, unit, source, and applicability; it is not a claim of specimen-specific calibration.
 
-## Documentation policy
+## Documentation principle
 
-Markdown describes only the resulting system: architecture, interfaces/contracts, implemented behavior/reference usage, and selected reference-backed nominal parameters. History, roadmaps, checklists, validation logs, and unresolved work belong outside project Markdown.
+> **README explains the system. Issues explain the journey. Code proves the current state.**
+
+README and durable Markdown describe the plant/control/supervisor/firmware architecture, interfaces, contracts, reference usage, safety boundaries, and selected nominal parameters. GitHub Issues preserve bring-up, experiments, calibration work, temporary constraints, design alternatives, and validation journeys. Code, configuration, target composition, and tests remain the authoritative evidence of executable behavior.
+
+Causal design rationale may remain in durable documentation when it explains why an architectural boundary exists; status logs, roadmaps, checklists, and unresolved work belong in Issues.
 
 ## Key documentation
 
