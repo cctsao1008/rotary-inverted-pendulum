@@ -53,6 +53,6 @@
   "simulation_fixture_completion": {
     "arm_carrier_mass_kg": 1e-6,
     "inertia_floor_kg_m2": 1e-9,
-    "meaning": "simulation-only numerical completion: arm_inertia_kg_m2 is represented as equivalent rotary inertia at the arm joint; tiny positive mass/transverse inertias keep the URDF dynamic link well-formed without claiming specimen geometry"
+    "meaning": "simulation-only numerical completion: arm_inertia_kg_m2 is represented as equivalent rotary inertia about the arm joint while the orthogonal arm inertia is chosen consistently with a slender radial carrier; pendulum_inertia_kg_m2 is used about both transverse axes while a tiny positive axial inertia keeps the URDF inertia tensor valid. These values do not claim specimen geometry."
   }
 }
