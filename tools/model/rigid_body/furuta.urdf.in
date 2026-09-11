@@ -10,7 +10,7 @@
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="{arm_carrier_mass_kg}"/>
       <inertia ixx="{inertia_floor_kg_m2}" ixy="0" ixz="0"
-               iyy="{inertia_floor_kg_m2}" iyz="0" izz="{arm_inertia_kg_m2}"/>
+               iyy="{arm_inertia_kg_m2}" iyz="0" izz="{arm_inertia_kg_m2}"/>
     </inertial>
   </link>
 
@@ -27,7 +27,7 @@
       <origin xyz="0 0 {pendulum_com_length_m}" rpy="0 0 0"/>
       <mass value="{pendulum_mass_kg}"/>
       <inertia ixx="{pendulum_inertia_kg_m2}" ixy="0" ixz="0"
-               iyy="{inertia_floor_kg_m2}" iyz="0" izz="{inertia_floor_kg_m2}"/>
+               iyy="{pendulum_inertia_kg_m2}" iyz="0" izz="{inertia_floor_kg_m2}"/>
     </inertial>
   </link>
 
