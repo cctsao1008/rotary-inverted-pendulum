@@ -24,6 +24,14 @@ python tools/model/rigid_body/pybullet_furuta.py \
   --output target/model-rigid-body/pybullet-trace.json
 ```
 
+Run the prediction-first coordinate/input checks separately:
+
+```bash
+python tools/model/rigid_body/check_causality.py
+```
+
+These checks deliberately fail on a persistent sign disagreement: a small positive/negative pendulum displacement must diverge in the corresponding direction near upright, and positive arm torque at upright must produce positive arm rate with negative pendulum rate under the declared coordinates. Such a failure is treated as a coordinate/geometry/input-contract defect, not as a controller-tuning problem.
+
 The runner requires the fixture plant values to match `parameters/reference-assembly.json`, disables Bullet's default joint motors, applies only the declared arm-torque profile, and exports the canonical project state order. PyBullet is a validation dependency only and is not part of production control or firmware.
 
 Correlation demonstrates implementation or model-structure consistency only. It does not establish Forest D1 specimen calibration, replace the parameter source/applicability semantics in `parameters/reference-assembly.json`, or grant physical motor authority.
