@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "model": "qnet-reference-furuta-rigid-body",
+  "scope": "reference-backed nominal rigid-body validation; not Forest D1 specimen calibration",
+  "world_frame": {
+    "x": "arm points along +x when phi = 0",
+    "y": "+phi moves the arm tip initially toward +y",
+    "z": "up; gravity acts along -z"
+  },
+  "joints": {
+    "arm": {
+      "name": "arm_joint",
+      "axis": [0.0, 0.0, 1.0],
+      "project_coordinate": "phi",
+      "zero": "arm along +x",
+      "positive": "right-hand rotation about +z"
+    },
+    "pendulum": {
+      "name": "pendulum_joint",
+      "axis": [-1.0, 0.0, 0.0],
+      "project_coordinate": "theta",
+      "zero": "pendulum COM vertically above its pivot (upright)",
+      "positive": "from upright, pendulum COM initially moves toward +y when phi = 0"
+    }
+  },
+  "state_mapping": [
+    {"project_state": "theta", "simulator_joint": "pendulum_joint", "quantity": "position", "scale": 1.0},
+    {"project_state": "theta_dot", "simulator_joint": "pendulum_joint", "quantity": "velocity", "scale": 1.0},
+    {"project_state": "phi", "simulator_joint": "arm_joint", "quantity": "position", "scale": 1.0},
+    {"project_state": "phi_dot", "simulator_joint": "arm_joint", "quantity": "velocity", "scale": 1.0}
+  ],
+  "input_mapping": {
+    "project_input": "arm_torque_nm",
+    "simulator_joint": "arm_joint",
+    "scale": 1.0,
+    "positive": "positive torque about +z"
+  },
+  "prediction_contract": {
+    "positive_arm_torque_at_upright": {
+      "phi_ddot": "positive",
+      "theta_ddot": "negative",
+      "rationale": "positive arm acceleration moves the pivot toward +y; inertial reaction tips the upright pendulum toward -y, which is negative theta by this contract"
+    },
+    "small_positive_theta_unforced_near_upright": {
+      "theta_ddot": "positive",
+      "rationale": "theta = 0 is the unstable upright equilibrium"
+    },
+    "small_negative_theta_unforced_near_upright": {
+      "theta_ddot": "negative",
+      "rationale": "mirror of the positive-theta unstable response"
+    }
+  },
+  "simulation_fixture_completion": {
+    "arm_carrier_mass_kg": 1e-6,
+    "inertia_floor_kg_m2": 1e-9,
+    "meaning": "simulation-only numerical completion: arm_inertia_kg_m2 is represented as equivalent rotary inertia at the arm joint; tiny positive mass/transverse inertias keep the URDF dynamic link well-formed without claiming specimen geometry"
+  }
+}
