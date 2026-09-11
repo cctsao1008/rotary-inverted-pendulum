@@ -8,4 +8,22 @@ The nonlinear Furuta correlation path uses an explicit reference-backed nominal 
 
 The external rigid-body path must not call or reproduce the project nonlinear derivative function. Its purpose is to pressure-test equation structure, coordinates, signs, and geometry using an independent rigid-body solver. A positive arm torque at upright is predicted to produce positive `phi_ddot` and negative `theta_ddot` under the declared coordinate contract; small unforced positive/negative `theta` near upright must accelerate further in the same sign because upright is unstable.
 
+Generate the nominal URDF without a physics-engine dependency:
+
+```bash
+python tools/model/rigid_body/build_furuta_urdf.py \
+  --output target/model-rigid-body/furuta.urdf \
+  --manifest target/model-rigid-body/manifest.json
+```
+
+The PyBullet validation dependency is isolated in `requirements-rigid-body.txt`. With it installed, produce a headless trace from the same nominal correlation fixture:
+
+```bash
+python tools/model/rigid_body/pybullet_furuta.py \
+  --fixture tools/model/fixtures/reference_nominal_correlation.json \
+  --output target/model-rigid-body/pybullet-trace.json
+```
+
+The runner requires the fixture plant values to match `parameters/reference-assembly.json`, disables Bullet's default joint motors, applies only the declared arm-torque profile, and exports the canonical project state order. PyBullet is a validation dependency only and is not part of production control or firmware.
+
 Correlation demonstrates implementation or model-structure consistency only. It does not establish Forest D1 specimen calibration, replace the parameter source/applicability semantics in `parameters/reference-assembly.json`, or grant physical motor authority.
