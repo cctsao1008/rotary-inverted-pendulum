@@ -101,7 +101,8 @@ jobs:
         run: |
           python -m py_compile \
             tools/model/rigid_body/build_furuta_urdf.py \
-            tools/model/rigid_body/pybullet_furuta.py
+            tools/model/rigid_body/pybullet_furuta.py \
+            tools/model/rigid_body/check_causality.py
       - name: Build nominal Furuta URDF contract
         run: |
           rm -rf target/model-rigid-body
@@ -119,3 +120,5 @@ jobs:
             --fixture tools/model/fixtures/reference_nominal_correlation.json \
             --output target/model-rigid-body/pybullet-trace-b.json
           cmp target/model-rigid-body/pybullet-trace-a.json target/model-rigid-body/pybullet-trace-b.json
+      - name: Rigid-body causality contract
+        run: python tools/model/rigid_body/check_causality.py
