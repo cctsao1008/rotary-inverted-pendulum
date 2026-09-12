@@ -40,6 +40,8 @@ jobs:
         run: python tools/model/check_pole_placement_baselines.py
       - name: Nominal nonlinear local-controller comparison
         run: python tools/model/compare_local_controller_baselines.py
+      - name: Reduced and full-3D controller robustness envelope
+        run: python tools/model/check_controller_robustness_envelope.py
       - name: Independent Furuta model correlation
         run: |
           rm -rf target/model-correlation
