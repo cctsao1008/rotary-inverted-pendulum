@@ -199,12 +199,12 @@ The STM32F103 executable does not instantiate a runtime `Tb6612Output` or hand i
 
 The STM32F103 live-shadow controller uses a QNET rotary-inverted-pendulum reference model from Abdullah et al. (2021), not Forest D1 specimen calibration.
 
-The published voltage-domain LQR gain vector and DC-motor constants are converted to the project state order and rotary-arm torque output. `control/state-feedback` owns the canonical converted reference vector consumed by the STM32 composition:
+The published voltage-domain LQR gain vector and DC-motor constants are converted to the project state order, project angle signs, and rotary-arm torque output. The paper's positive pendulum-angle direction is opposite the project's positive `theta`, while the arm direction maps directly to `phi`. `control/state-feedback` owns the canonical converted reference vector consumed by the STM32 composition:
 
 ```text
 project state order: [theta, theta_dot, phi, phi_dot]
-nominal torque-feedback gains:
-[0.18355, 0.01585, -0.01120, -0.00745]
+nominal torque-feedback gains used by u = -Kx:
+[-0.18355, -0.01585, -0.01120, -0.00745]
 ```
 
 The live-shadow swing-up model uses the same reference family for pendulum mass, center-of-mass length, inertia, target energy, and energy-balance gain. These values define a reference-backed computation path and are not claims of Forest D1 specimen calibration.
