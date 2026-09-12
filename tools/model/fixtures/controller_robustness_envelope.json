@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "description": "Engineering pressure-test envelope for nominal local state-feedback baselines. Perturbation magnitudes are deliberate design probes, not measured Forest D1 specimen uncertainty bounds.",
+  "scope": "simulation-only robustness characterization; no specimen calibration and no physical actuator authority",
+  "sample_period_us": 1000,
+  "integration_step_us": 500,
+  "duration_us": 5000000,
+  "settle_hold_samples": 20,
+  "evaluation": {
+    "final_abs_theta_rad_max": 0.13962634,
+    "final_abs_theta_dot_rad_s_max": 1.0,
+    "basis": "current project balance-entry envelope (8 deg, 1 rad/s); used here only as a common recovery classifier"
+  },
+  "scenarios": [
+    {
+      "id": "nominal",
+      "class": "nominal",
+      "rationale": "Separately identifiable baseline using the same 5 deg local initial condition as rotary_balance.toml."
+    },
+    {
+      "id": "initial-theta-plus-10deg",
+      "class": "initial_state",
+      "initial_state_override": {"theta_rad": 0.17453292519943295},
+      "rationale": "Larger but still local upright-angle displacement pressure test."
+    },
+    {
+      "id": "initial-theta-minus-10deg",
+      "class": "initial_state",
+      "initial_state_override": {"theta_rad": -0.17453292519943295},
+      "rationale": "Mirrored upright-angle displacement checks sign symmetry and recovery."
+    },
+    {
+      "id": "initial-theta-rate-plus-0p5",
+      "class": "initial_state",
+      "initial_state_override": {"theta_dot_rad_s": 0.5},
+      "rationale": "Bounded incoming pendulum-rate pressure test near upright."
+    },
+    {
+      "id": "initial-arm-offset-plus-0p25",
+      "class": "initial_state",
+      "initial_state_override": {"phi_rad": 0.25},
+      "rationale": "Checks arm-position regulation without changing the pendulum coordinate convention."
+    },
+    {
+      "id": "pendulum-mass-plus-10pct",
+      "class": "plant_parameter",
+      "plant_scale": {"pendulum_mass_kg": 1.1},
+      "rationale": "Plus/minus 10 percent is an engineering pressure-test magnitude, not a measured mass tolerance."
+    },
+    {
+      "id": "pendulum-mass-minus-10pct",
+      "class": "plant_parameter",
+      "plant_scale": {"pendulum_mass_kg": 0.9},
+      "rationale": "Mirrors the mass pressure test to expose asymmetric controller margin."
+    },
+    {
+      "id": "pendulum-com-plus-10pct",
+      "class": "plant_parameter",
+      "plant_scale": {"pendulum_com_length_m": 1.1},
+      "rationale": "Perturbs gravity leverage and coupling without claiming installed-specimen COM uncertainty."
+    },
+    {
+      "id": "pendulum-inertia-plus-10pct",
+      "class": "plant_parameter",
+      "plant_scale": {"pendulum_inertia_kg_m2": 1.1},
+      "rationale": "Perturbs rotational inertia independently from mass/COM for structural sensitivity."
+    },
+    {
+      "id": "arm-damping-half",
+      "class": "plant_parameter",
+      "plant_scale": {"arm_viscous_damping_nm_per_rad_s": 0.5},
+      "rationale": "Damping is especially specimen-dependent; 0.5x is only a pressure test, not a tolerance claim."
+    },
+    {
+      "id": "positive-arm-torque-impulse",
+      "class": "external_disturbance",
+      "external_arm_torque": {"start_us": 500000, "duration_us": 50000, "torque_nm": 0.01},
+      "rationale": "A bounded additive plant disturbance tests recovery without hiding the cause inside controller authority."
+    },
+    {
+      "id": "half-actuator-authority",
+      "class": "actuator_capability",
+      "actuator_limit_scale": 0.5,
+      "rationale": "Explicitly reduces the simulation control-torque bound to 50 percent as a capability pressure test; not a measured hardware limit."
+    }
+  ]
+}
