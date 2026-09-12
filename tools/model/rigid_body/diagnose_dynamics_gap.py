@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Localize analytical-vs-rigid-body Furuta dynamics differences by one-step probes.
+"""Localize reduced-vs-full-vs-rigid-body Furuta dynamics differences.
 
-This is a diagnostic, not an acceptance test. Each probe predicts instantaneous
-acceleration with the independent SciPy reference derivative and estimates the
-corresponding PyBullet acceleration from one 50 us rigid-body step. Sweeps vary
-one state component at a time so configuration and velocity-coupling effects are
-visible before long-horizon integration can amplify them.
+This is a diagnostic, not an acceptance test. Each probe evaluates instantaneous
+acceleration with both analytical model classes and estimates the corresponding
+PyBullet acceleration from one 50 us rigid-body step. Sweeps vary one state
+component at a time so configuration and velocity-coupling effects are visible
+before long-horizon integration can amplify them.
 """
 
 from __future__ import annotations
@@ -21,7 +21,11 @@ MODEL_DIR = Path(__file__).resolve().parents[1]
 if str(MODEL_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_DIR))
 
-from reference_furuta import derivative  # noqa: E402
+from reference_furuta import derivative as reduced_derivative  # noqa: E402
+from full3d_furuta import (  # noqa: E402
+    derivative as full3d_derivative,
+    dynamics_terms as full3d_terms,
+)
 from pybullet_furuta import (  # noqa: E402
     DEFAULT_CONTRACT,
     DEFAULT_FIXTURE,
@@ -45,6 +49,26 @@ def one_step_fixture(base: dict[str, Any], state: list[float], torque_nm: float)
     return fixture
 
 
+def pendulum_axial_inertia() -> float:
+    contract = json.loads(DEFAULT_CONTRACT.read_text(encoding="utf-8"))
+    completion = contract["simulation_fixture_completion"]
+    return float(completion["inertia_floor_kg_m2"])
+
+
+def acceleration_pair(values: np.ndarray) -> dict[str, float]:
+    return {
+        "theta_ddot": float(values[1]),
+        "phi_ddot": float(values[3]),
+    }
+
+
+def subtract(lhs: dict[str, float], rhs: dict[str, float]) -> dict[str, float]:
+    return {
+        "theta_ddot": lhs["theta_ddot"] - rhs["theta_ddot"],
+        "phi_ddot": lhs["phi_ddot"] - rhs["phi_ddot"],
+    }
+
+
 def probe(
     base: dict[str, Any],
     name: str,
@@ -60,38 +84,79 @@ def probe(
     )
     final_state = np.asarray(trace["samples"][-1]["state"], dtype=np.float64)
     initial = np.asarray(state, dtype=np.float64)
-    bullet_theta_ddot = float((final_state[1] - initial[1]) / STEP_S)
-    bullet_phi_ddot = float((final_state[3] - initial[3]) / STEP_S)
+    pybullet = {
+        "theta_ddot": float((final_state[1] - initial[1]) / STEP_S),
+        "phi_ddot": float((final_state[3] - initial[3]) / STEP_S),
+    }
 
-    analytical = derivative(
-        {key: float(value) for key, value in base["plant"].items()},
+    plant = {key: float(value) for key, value in base["plant"].items()}
+    reduced = acceleration_pair(reduced_derivative(plant, initial, torque_nm))
+    axial_inertia = pendulum_axial_inertia()
+    full_3d = acceleration_pair(
+        full3d_derivative(
+            plant,
+            initial,
+            torque_nm,
+            pendulum_axial_inertia_kg_m2=axial_inertia,
+        )
+    )
+    full_terms = full3d_terms(
+        plant,
         initial,
         torque_nm,
+        pendulum_axial_inertia_kg_m2=axial_inertia,
     )
-    analytical_theta_ddot = float(analytical[1])
-    analytical_phi_ddot = float(analytical[3])
 
     return {
         "name": name,
         "state": state,
         "arm_torque_nm": torque_nm,
-        "analytical": {
-            "theta_ddot": analytical_theta_ddot,
-            "phi_ddot": analytical_phi_ddot,
+        "qnet_reduced": reduced,
+        "full_3d_analytical": full_3d,
+        "pybullet_one_step": pybullet,
+        "differences": {
+            "full_3d_minus_qnet_reduced": subtract(full_3d, reduced),
+            "pybullet_minus_qnet_reduced": subtract(pybullet, reduced),
+            "pybullet_minus_full_3d": subtract(pybullet, full_3d),
         },
-        "pybullet_one_step": {
-            "theta_ddot": bullet_theta_ddot,
-            "phi_ddot": bullet_phi_ddot,
-        },
-        "difference": {
-            "theta_ddot": bullet_theta_ddot - analytical_theta_ddot,
-            "phi_ddot": bullet_phi_ddot - analytical_phi_ddot,
+        "full_3d_only_terms": {
+            "arm_axis_inertia_phi_phi": full_terms["mass_matrix"]["phi_phi"],
+            "arm_rhs_cross_velocity": full_terms["arm_rhs_terms"]["cross_velocity"],
+            "pendulum_rhs_phi_rate_squared": full_terms["pendulum_rhs_terms"][
+                "phi_rate_squared"
+            ],
         },
     }
 
 
-def max_abs(records: list[dict[str, Any]], axis: str) -> float:
-    return max(abs(float(record["difference"][axis])) for record in records)
+def max_abs(
+    records: list[dict[str, Any]],
+    comparison: str,
+    axis: str,
+) -> float:
+    return max(
+        abs(float(record["differences"][comparison][axis]))
+        for record in records
+    )
+
+
+def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
+    comparisons = (
+        "full_3d_minus_qnet_reduced",
+        "pybullet_minus_qnet_reduced",
+        "pybullet_minus_full_3d",
+    )
+    return {
+        comparison: {
+            "max_abs_theta_ddot_difference": max_abs(
+                records, comparison, "theta_ddot"
+            ),
+            "max_abs_phi_ddot_difference": max_abs(
+                records, comparison, "phi_ddot"
+            ),
+        }
+        for comparison in comparisons
+    }
 
 
 def main() -> int:
@@ -109,6 +174,19 @@ def main() -> int:
         probe(base, f"phi_dot={rate:+.1f}", [0.4, 0.0, 0.0, rate])
         for rate in (-4.0, -2.0, 0.0, 2.0, 4.0)
     ]
+    mixed_velocity_sweep = [
+        probe(
+            base,
+            f"theta_dot={theta_rate:+.1f},phi_dot={phi_rate:+.1f}",
+            [0.4, theta_rate, 0.0, phi_rate],
+        )
+        for theta_rate, phi_rate in (
+            (-2.0, -2.0),
+            (-2.0, 2.0),
+            (2.0, -2.0),
+            (2.0, 2.0),
+        )
+    ]
     torque_sweep = [
         probe(base, f"tau={torque:+.4f}", [0.4, 0.0, 0.0, 0.0], torque)
         for torque in (-0.002, -0.001, 0.0, 0.001, 0.002)
@@ -118,19 +196,23 @@ def main() -> int:
         "theta_zero_velocity_zero_torque": theta_sweep,
         "theta_dot_at_theta_0p4": theta_dot_sweep,
         "phi_dot_at_theta_0p4": phi_dot_sweep,
+        "mixed_velocity_at_theta_0p4": mixed_velocity_sweep,
         "torque_at_theta_0p4_zero_velocity": torque_sweep,
     }
-    summary = {
-        name: {
-            "max_abs_theta_ddot_difference": max_abs(records, "theta_ddot"),
-            "max_abs_phi_ddot_difference": max_abs(records, "phi_ddot"),
-        }
-        for name, records in sweeps.items()
-    }
+    summary = {name: summarize(records) for name, records in sweeps.items()}
     payload = {
-        "schema": 1,
+        "schema": 2,
         "step_us": STEP_US,
-        "scope": "diagnostic localization only; no acceptance threshold and no specimen-calibration claim",
+        "model_classes": {
+            "qnet_reduced": "source-backed reduced/equivalent nonlinear model",
+            "full_3d_analytical": "geometry-derived full articulated Furuta model",
+            "pybullet_one_step": "external Bullet rigid-body finite-step estimate",
+        },
+        "pendulum_axial_inertia_kg_m2": pendulum_axial_inertia(),
+        "scope": (
+            "diagnostic localization only; no acceptance threshold, "
+            "production-model promotion, or specimen-calibration claim"
+        ),
         "summary": summary,
         "sweeps": sweeps,
     }
