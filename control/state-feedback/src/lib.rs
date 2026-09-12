@@ -7,12 +7,20 @@ use rip_robot_domain::{EstimatedState, GeneralizedDemand, StateValidity, TorqueN
 /// Reference-backed QNET RIP LQR gains expressed in the project's canonical
 /// state order `[theta, theta_dot, phi, phi_dot]` and arm-torque domain.
 ///
-/// Abdullah et al. (2021) report voltage-domain gains in order
-/// `[phi, theta, phi_dot, theta_dot]` as `[-2.24, 36.71, -1.49, 3.17]`
-/// with `V = -Kx`. Reordering and multiplying by `Kt / Rm = 0.042 / 8.4`
-/// gives this torque-feedback vector. It is a nominal reference profile, not
-/// Forest D1 specimen calibration.
-pub const QNET_REFERENCE_TORQUE_GAINS: [f32; 4] = [0.183_55, 0.015_85, -0.011_20, -0.007_45];
+/// Abdullah et al. (2021) report voltage-domain gains in paper state order
+/// `[arm_angle, pendulum_angle, arm_rate, pendulum_rate]` as
+/// `[-2.24, 36.71, -1.49, 3.17]` with `V = -Kx`. The paper's positive
+/// pendulum-angle direction is opposite the project's positive `theta`
+/// direction, so `paper_pendulum_angle = -theta` and
+/// `paper_pendulum_rate = -theta_dot`, while the arm coordinates map directly
+/// to `phi` and `phi_dot`.
+///
+/// Applying that coordinate transform first gives the project voltage-domain
+/// vector `[-36.71, -3.17, -2.24, -1.49]`. Multiplying by
+/// `Kt / Rm = 0.042 / 8.4 = 0.005 N*m/V` gives this torque-feedback vector.
+/// It is a nominal reference profile, not Forest D1 specimen calibration.
+pub const QNET_REFERENCE_TORQUE_GAINS: [f32; 4] =
+    [-0.183_55, -0.015_85, -0.011_20, -0.007_45];
 
 pub trait Controller {
     type Error;
@@ -96,8 +104,24 @@ mod tests {
     fn qnet_reference_profile_has_canonical_project_order_and_signs() {
         assert_eq!(
             QNET_REFERENCE_TORQUE_GAINS,
-            [0.183_55, 0.015_85, -0.011_20, -0.007_45]
+            [-0.183_55, -0.015_85, -0.011_20, -0.007_45]
         );
+    }
+
+    #[test]
+    fn qnet_reference_feedback_commands_positive_torque_for_positive_theta() {
+        let mut controller = LqrController::new(QNET_REFERENCE_TORQUE_GAINS).unwrap();
+        let state = EstimatedState {
+            timestamp: TimestampUs(10),
+            theta: AngleRad(0.1),
+            theta_dot: AngularRateRadPerSec(0.0),
+            phi: AngleRad(0.0),
+            phi_dot: AngularRateRadPerSec(0.0),
+            validity: StateValidity::Valid,
+        };
+
+        let demand = controller.compute(&state).unwrap();
+        assert!(demand.arm_torque.0 > 0.0);
     }
 
     #[test]
