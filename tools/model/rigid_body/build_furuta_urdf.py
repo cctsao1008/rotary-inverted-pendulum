@@ -30,6 +30,12 @@ PLANT_KEYS = (
     "arm_viscous_damping_nm_per_rad_s",
     "pendulum_viscous_damping_nm_per_rad_s",
 )
+DIAGNOSTIC_OVERRIDE_KEYS = frozenset(
+    {
+        "arm_viscous_damping_nm_per_rad_s",
+        "pendulum_viscous_damping_nm_per_rad_s",
+    }
+)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -52,10 +58,7 @@ def load_render_values(parameters_path: Path, contract_path: Path) -> dict[str, 
         raise ValueError("unsupported rigid-body contract schema")
 
     plant = parameters["plant"]
-    values = {
-        key: finite_float(plant[key]["value"], key)
-        for key in PLANT_KEYS
-    }
+    values = {key: finite_float(plant[key]["value"], key) for key in PLANT_KEYS}
     strictly_positive = (
         "pendulum_mass_kg",
         "arm_length_m",
@@ -86,6 +89,32 @@ def load_render_values(parameters_path: Path, contract_path: Path) -> dict[str, 
     return values
 
 
+def apply_diagnostic_overrides(
+    values: dict[str, float],
+    overrides: dict[str, float] | None,
+) -> dict[str, float]:
+    """Apply explicitly bounded simulation-only overrides.
+
+    Only joint damping may be overridden. Geometry, mass and inertia remain
+    canonical so a diagnostic cannot silently turn into a second parameter
+    registry.
+    """
+
+    if not overrides:
+        return values
+    unknown = set(overrides).difference(DIAGNOSTIC_OVERRIDE_KEYS)
+    if unknown:
+        raise ValueError(f"unsupported diagnostic URDF overrides: {sorted(unknown)}")
+
+    result = dict(values)
+    for key, raw_value in overrides.items():
+        value = finite_float(raw_value, key)
+        if value < 0.0:
+            raise ValueError(f"{key} diagnostic override must be nonnegative")
+        result[key] = value
+    return result
+
+
 def validate_contract_against_urdf(contract: dict[str, Any], urdf_text: str) -> None:
     root = ET.fromstring(urdf_text)
     joints = {joint.attrib["name"]: joint for joint in root.findall("joint")}
@@ -109,8 +138,16 @@ def validate_contract_against_urdf(contract: dict[str, Any], urdf_text: str) -> 
         raise ValueError("rigid-body state mapping must use canonical project state order")
 
 
-def render_urdf(parameters_path: Path, contract_path: Path, template_path: Path) -> tuple[str, dict[str, float]]:
-    values = load_render_values(parameters_path, contract_path)
+def render_urdf(
+    parameters_path: Path,
+    contract_path: Path,
+    template_path: Path,
+    *,
+    value_overrides: dict[str, float] | None = None,
+) -> tuple[str, dict[str, float]]:
+    values = apply_diagnostic_overrides(
+        load_render_values(parameters_path, contract_path), value_overrides
+    )
     template = template_path.read_text(encoding="utf-8")
     rendered_values = {key: format(value, ".17g") for key, value in values.items()}
     rendered = template.format(**rendered_values)
