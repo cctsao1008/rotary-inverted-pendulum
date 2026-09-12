@@ -103,7 +103,9 @@ jobs:
           python -m py_compile \
             tools/model/rigid_body/build_furuta_urdf.py \
             tools/model/rigid_body/pybullet_furuta.py \
+            tools/model/rigid_body/full3d_furuta.py \
             tools/model/rigid_body/check_causality.py \
+            tools/model/rigid_body/check_linearization_equivalence.py \
             tools/model/rigid_body/compare_three_way.py \
             tools/model/rigid_body/diagnose_dynamics_gap.py
       - name: Build nominal Furuta URDF contract
@@ -125,6 +127,8 @@ jobs:
           cmp target/model-rigid-body/pybullet-trace-a.json target/model-rigid-body/pybullet-trace-b.json
       - name: Rigid-body causality contract
         run: python tools/model/rigid_body/check_causality.py
+      - name: Reduced versus full-3D upright linearization
+        run: python tools/model/rigid_body/check_linearization_equivalence.py
       - name: Three-way nominal model difference characterization
         run: |
           cargo run -p rip-sitl --release --bin plant_reference_trace -- \
