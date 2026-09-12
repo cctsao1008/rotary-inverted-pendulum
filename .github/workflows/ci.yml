@@ -38,6 +38,8 @@ jobs:
         run: python tools/model/check_reference_lqr_mapping.py
       - name: QNET pole-placement baseline derivation and upright stability
         run: python tools/model/check_pole_placement_baselines.py
+      - name: Nominal nonlinear local-controller comparison
+        run: python tools/model/compare_local_controller_baselines.py
       - name: Independent Furuta model correlation
         run: |
           rm -rf target/model-correlation
