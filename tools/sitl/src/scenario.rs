@@ -19,25 +19,6 @@ pub struct Scenario {
     pub rotary: Option<RotaryScenario>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum BalanceControllerProfile {
-    #[default]
-    QnetLqr,
-    PolePlacementC1,
-    PolePlacementC2,
-}
-
-impl BalanceControllerProfile {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::QnetLqr => "qnet_lqr",
-            Self::PolePlacementC1 => "pole_placement_c1",
-            Self::PolePlacementC2 => "pole_placement_c2",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RotaryScenario {
@@ -46,8 +27,6 @@ pub struct RotaryScenario {
     pub initial_theta_dot_rad_s: f32,
     pub initial_phi_rad: f32,
     pub initial_phi_dot_rad_s: f32,
-    #[serde(default)]
-    pub balance_controller: BalanceControllerProfile,
 }
 
 #[derive(Debug)]
@@ -224,36 +203,10 @@ mod tests {
             initial_theta_dot_rad_s: 0.0,
             initial_phi_rad: 0.0,
             initial_phi_dot_rad_s: 0.0,
-            balance_controller: BalanceControllerProfile::QnetLqr,
         });
         assert!(matches!(
             scenario.validate(),
             Err(ScenarioError::PlantStepNotAligned)
         ));
-    }
-
-    #[test]
-    fn omitted_balance_profile_defaults_to_qnet_lqr() {
-        let parsed: Scenario = toml::from_str(
-            r#"
-id = "default-profile"
-duration_us = 1000
-seed = 1
-sensor_period_us = 1000
-runtime_period_us = 1000
-
-[rotary]
-plant_step_us = 50
-initial_theta_rad = 0.0
-initial_theta_dot_rad_s = 0.0
-initial_phi_rad = 0.0
-initial_phi_dot_rad_s = 0.0
-"#,
-        )
-        .unwrap();
-        assert_eq!(
-            parsed.rotary.unwrap().balance_controller,
-            BalanceControllerProfile::QnetLqr
-        );
     }
 }
