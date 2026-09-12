@@ -81,6 +81,10 @@ jobs:
           cmp target/sitl-balance-a/manifest.json target/sitl-balance-b/manifest.json
           cmp target/sitl-balance-a/trace.jsonl target/sitl-balance-b/trace.jsonl
           cmp target/sitl-balance-a/summary.json target/sitl-balance-b/summary.json
+          python tools/sitl/check_rotary_balance.py \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --summary target/sitl-balance-a/summary.json \
+            --trace target/sitl-balance-a/trace.jsonl
           cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_swingup.toml \
             --parameters parameters/reference-assembly.json \
