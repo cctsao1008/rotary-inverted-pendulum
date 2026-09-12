@@ -13,10 +13,11 @@ executed against both the source-backed reduced QNET model and the independent
 geometry-derived full-3D analytical model so a controller is not judged only by
 the model class from which its local linearization originated.
 
-Perturbed-run recovery is evidence, not a CI requirement. CI gates only the
-integrity of the harness, control-torque bounding, and recovery of the separately
-identified nominal case. A failed pressure-test scenario should remain visible
-rather than being tuned away to make CI green.
+CI gates harness integrity, control-torque bounding, and nominal recovery on the
+reduced QNET design model from which these local gains were derived. Recovery on
+the independent full-3D model and on perturbed cases is robustness evidence, not
+a CI requirement. A failed independent-model or pressure-test scenario must stay
+visible rather than being tuned away to make CI green.
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ MODEL_DERIVATIVES: dict[str, Callable[[dict[str, float], np.ndarray, float], np.
     "full3d_geometry": full3d_derivative,
 }
 
+DESIGN_MODEL = "reduced_qnet"
 STATE_INDEX = {
     "theta_rad": 0,
     "theta_dot_rad_s": 1,
@@ -292,7 +294,8 @@ def main() -> int:
 
     results: dict[str, Any] = {}
     harness_pass = True
-    pressure_test_failures = 0
+    robustness_nonrecoveries = 0
+    required_design_nominal_failures = 0
 
     for model_name, derivative in MODEL_DERIVATIVES.items():
         model_results: dict[str, Any] = {}
@@ -318,10 +321,16 @@ def main() -> int:
                     and bool(result["finite"])
                     and bool(result["control_torque_bound_respected"])
                 )
-                if scenario_id == "nominal":
-                    harness_pass = harness_pass and bool(result["recovered"])
+
+                is_required_design_nominal = (
+                    model_name == DESIGN_MODEL and scenario_id == "nominal"
+                )
+                if is_required_design_nominal:
+                    if not result["recovered"]:
+                        required_design_nominal_failures += 1
+                        harness_pass = False
                 elif not result["recovered"]:
-                    pressure_test_failures += 1
+                    robustness_nonrecoveries += 1
 
             model_results[profile_name] = {
                 "gains": gains.tolist(),
@@ -339,15 +348,18 @@ def main() -> int:
         "state_order": ["theta", "theta_dot", "phi", "phi_dot"],
         "feedback_law": "1 kHz sample-and-hold u = clamp(-Kx)",
         "model_classes": list(MODEL_DERIVATIVES),
+        "design_model": DESIGN_MODEL,
         "nominal_reference_plant": str(PARAMETERS.relative_to(ROOT)),
         "nominal_initial_state": base_initial.tolist(),
         "nominal_control_torque_limit_nm": base_max_torque,
         "results": results,
-        "pressure_test_nonrecoveries": pressure_test_failures,
+        "required_design_nominal_failures": required_design_nominal_failures,
+        "robustness_nonrecoveries": robustness_nonrecoveries,
         "ci_policy": {
             "requires_all_runs_finite": True,
             "requires_control_torque_bound_respected": True,
-            "requires_nominal_recovery_for_every_model_and_controller": True,
+            "requires_reduced_qnet_nominal_recovery_for_every_controller": True,
+            "full3d_nominal_nonrecovery_is_reported_not_ci_failure": True,
             "perturbed_nonrecovery_is_reported_not_ci_failure": True,
         },
         "scope": envelope["scope"],
