@@ -19,8 +19,7 @@ use rip_robot_domain::{EstimatedState, GeneralizedDemand, StateValidity, TorqueN
 /// vector `[-36.71, -3.17, -2.24, -1.49]`. Multiplying by
 /// `Kt / Rm = 0.042 / 8.4 = 0.005 N*m/V` gives this torque-feedback vector.
 /// It is a nominal reference profile, not Forest D1 specimen calibration.
-pub const QNET_REFERENCE_TORQUE_GAINS: [f32; 4] =
-    [-0.183_55, -0.015_85, -0.011_20, -0.007_45];
+pub const QNET_REFERENCE_TORQUE_GAINS: [f32; 4] = [-0.183_55, -0.015_85, -0.011_20, -0.007_45];
 
 pub trait Controller {
     type Error;
