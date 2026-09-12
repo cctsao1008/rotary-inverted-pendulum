@@ -21,6 +21,28 @@ use rip_robot_domain::{EstimatedState, GeneralizedDemand, StateValidity, TorqueN
 /// It is a nominal reference profile, not Forest D1 specimen calibration.
 pub const QNET_REFERENCE_TORQUE_GAINS: [f32; 4] = [-0.183_55, -0.015_85, -0.011_20, -0.007_45];
 
+/// Pole-placement C1 baseline derived on the project's QNET nominal upright
+/// linearization, using desired poles `{-1, -5, -1-3j, -1+3j}` from Fahmizal
+/// (2023). Only the desired pole locations are borrowed from that paper; its
+/// plant matrices and controller gains are not copied.
+pub const QNET_POLE_PLACEMENT_C1_TORQUE_GAINS: [f32; 4] = [
+    -0.036_116_928,
+    -0.000_687_032_5,
+    -0.000_032_856_984,
+    -0.000_255_999_78,
+];
+
+/// Pole-placement C2 baseline derived on the project's QNET nominal upright
+/// linearization, using desired poles `{-5, -4.1, -5-3j, -5+3j}` from Fahmizal
+/// (2023). Only the desired pole locations are borrowed from that paper; its
+/// plant matrices and controller gains are not copied.
+pub const QNET_POLE_PLACEMENT_C2_TORQUE_GAINS: [f32; 4] = [
+    -0.045_846_36,
+    -0.002_038_660_6,
+    -0.000_458_026_36,
+    -0.000_548_032_64,
+];
+
 pub trait Controller {
     type Error;
 
@@ -28,25 +50,30 @@ pub trait Controller {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LqrConfigError {
+pub enum StateFeedbackConfigError {
     NonFiniteGain,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LqrError {
+pub enum StateFeedbackError {
     InvalidState,
     Numeric,
 }
 
+/// Full-state linear feedback in the project convention `u = -Kx`.
+///
+/// The implementation deliberately does not encode how `K` was designed.
+/// LQR and pole placement are controller-design methods; the runtime state
+/// feedback law and its physical torque semantics are identical.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LqrController {
+pub struct StateFeedbackController {
     gains: [f32; 4],
 }
 
-impl LqrController {
-    pub fn new(gains: [f32; 4]) -> Result<Self, LqrConfigError> {
+impl StateFeedbackController {
+    pub fn new(gains: [f32; 4]) -> Result<Self, StateFeedbackConfigError> {
         if gains.iter().any(|gain| !gain.is_finite()) {
-            return Err(LqrConfigError::NonFiniteGain);
+            return Err(StateFeedbackConfigError::NonFiniteGain);
         }
         Ok(Self { gains })
     }
@@ -56,18 +83,18 @@ impl LqrController {
     }
 }
 
-impl Controller for LqrController {
-    type Error = LqrError;
+impl Controller for StateFeedbackController {
+    type Error = StateFeedbackError;
 
     fn compute(&mut self, state: &EstimatedState) -> Result<GeneralizedDemand, Self::Error> {
         if state.validity != StateValidity::Valid || !state.is_finite() {
-            return Err(LqrError::InvalidState);
+            return Err(StateFeedbackError::InvalidState);
         }
 
         let state_vector = state.as_vector();
         let feedback = dot_f32(&self.gains, &state_vector);
         if !feedback.is_finite() {
-            return Err(LqrError::Numeric);
+            return Err(StateFeedbackError::Numeric);
         }
 
         Ok(GeneralizedDemand {
@@ -76,14 +103,21 @@ impl Controller for LqrController {
     }
 }
 
+/// Compatibility names retained for existing LQR call sites. The runtime law
+/// is generic full-state feedback; the design provenance lives in the gain
+/// profile selected by the caller.
+pub type LqrController = StateFeedbackController;
+pub type LqrConfigError = StateFeedbackConfigError;
+pub type LqrError = StateFeedbackError;
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rip_robot_domain::{AngleRad, AngularRateRadPerSec, TimestampUs};
 
     #[test]
-    fn lqr_uses_theta_theta_dot_phi_phi_dot_order() {
-        let mut controller = LqrController::new([2.0, 3.0, 5.0, 7.0]).unwrap();
+    fn state_feedback_uses_theta_theta_dot_phi_phi_dot_order() {
+        let mut controller = StateFeedbackController::new([2.0, 3.0, 5.0, 7.0]).unwrap();
         let state = EstimatedState {
             timestamp: TimestampUs(10),
             theta: AngleRad(1.0),
@@ -108,8 +142,7 @@ mod tests {
     }
 
     #[test]
-    fn qnet_reference_feedback_commands_positive_torque_for_positive_theta() {
-        let mut controller = LqrController::new(QNET_REFERENCE_TORQUE_GAINS).unwrap();
+    fn all_nominal_baselines_command_restorative_torque_for_positive_theta() {
         let state = EstimatedState {
             timestamp: TimestampUs(10),
             theta: AngleRad(0.1),
@@ -119,14 +152,24 @@ mod tests {
             validity: StateValidity::Valid,
         };
 
-        let demand = controller.compute(&state).unwrap();
-        assert!(demand.arm_torque.0 > 0.0);
+        for gains in [
+            QNET_REFERENCE_TORQUE_GAINS,
+            QNET_POLE_PLACEMENT_C1_TORQUE_GAINS,
+            QNET_POLE_PLACEMENT_C2_TORQUE_GAINS,
+        ] {
+            let mut controller = StateFeedbackController::new(gains).unwrap();
+            let demand = controller.compute(&state).unwrap();
+            assert!(demand.arm_torque.0 > 0.0);
+        }
     }
 
     #[test]
     fn invalid_state_is_rejected() {
-        let mut controller = LqrController::new([1.0, 1.0, 1.0, 1.0]).unwrap();
+        let mut controller = StateFeedbackController::new([1.0, 1.0, 1.0, 1.0]).unwrap();
         let state = EstimatedState::default();
-        assert_eq!(controller.compute(&state), Err(LqrError::InvalidState));
+        assert_eq!(
+            controller.compute(&state),
+            Err(StateFeedbackError::InvalidState)
+        );
     }
 }
