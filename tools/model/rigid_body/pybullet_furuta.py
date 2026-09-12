@@ -139,7 +139,18 @@ def simulate(
     parameters_path: Path,
     contract_path: Path,
     template_path: Path,
+    *,
+    gravity_override_m_s2: float | None = None,
+    urdf_value_overrides: dict[str, float] | None = None,
 ) -> dict[str, Any]:
+    """Run one deterministic headless rigid-body trace.
+
+    Diagnostic overrides are deliberately narrow. Gravity may be overridden at
+    the Bullet world level, while URDF overrides are bounded by
+    ``build_furuta_urdf`` to joint damping only. Geometry, mass and inertia stay
+    canonical.
+    """
+
     try:
         import pybullet as p
     except ImportError as exc:
@@ -147,7 +158,12 @@ def simulate(
             "PyBullet is required; install tools/model/requirements-rigid-body.txt"
         ) from exc
 
-    urdf_text, _ = render_urdf(parameters_path, contract_path, template_path)
+    urdf_text, rendered_values = render_urdf(
+        parameters_path,
+        contract_path,
+        template_path,
+        value_overrides=urdf_value_overrides,
+    )
     contract = load_json(contract_path)
     assert_fixture_matches_parameters(fixture, parameters_path)
 
@@ -156,7 +172,13 @@ def simulate(
     duration_us = int(fixture["duration_us"])
     substeps_per_sample = sample_period_us // integration_step_us
     dt_s = integration_step_us * 1.0e-6
-    gravity = float(fixture["plant"]["gravity_m_s2"])
+    gravity = (
+        float(fixture["plant"]["gravity_m_s2"])
+        if gravity_override_m_s2 is None
+        else float(gravity_override_m_s2)
+    )
+    if not math.isfinite(gravity) or gravity < 0.0:
+        raise ValueError("gravity override must be finite and nonnegative")
 
     connection = p.connect(p.DIRECT)
     if connection < 0:
@@ -237,6 +259,18 @@ def simulate(
             "engine_api_version": int(p.getAPIVersion()),
             "state_order": list(STATE_NAMES),
             "contract": contract["model"],
+            "environment": {
+                "gravity_m_s2": gravity,
+                "rendered_arm_viscous_damping_nm_per_rad_s": rendered_values[
+                    "arm_viscous_damping_nm_per_rad_s"
+                ],
+                "rendered_pendulum_viscous_damping_nm_per_rad_s": rendered_values[
+                    "pendulum_viscous_damping_nm_per_rad_s"
+                ],
+                "diagnostic_override": (
+                    gravity_override_m_s2 is not None or bool(urdf_value_overrides)
+                ),
+            },
             "scope": "model-structure validation only; not Forest D1 specimen calibration",
             "samples": samples,
         }
