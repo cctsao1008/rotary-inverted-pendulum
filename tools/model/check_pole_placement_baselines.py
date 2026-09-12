@@ -14,6 +14,7 @@ calibration and grants no physical motor authority.
 
 from __future__ import annotations
 
+from itertools import permutations
 import json
 import re
 from typing import Any
@@ -66,14 +67,21 @@ def parse_rust_gains(name: str) -> np.ndarray:
     return np.asarray(values, dtype=np.float64)
 
 
-def ordered_poles(values: np.ndarray) -> list[complex]:
-    return sorted((complex(value) for value in values), key=lambda value: (value.real, value.imag))
-
-
 def pole_error(actual: np.ndarray, desired: list[complex]) -> float:
-    actual_ordered = ordered_poles(actual)
-    desired_ordered = sorted(desired, key=lambda value: (value.real, value.imag))
-    return max(abs(lhs - rhs) for lhs, rhs in zip(actual_ordered, desired_ordered, strict=True))
+    """Return the smallest worst-case error over all one-to-one pole matches.
+
+    Sorting complex poles lexicographically is not valid when several desired
+    poles share the same real part: a real pole can be paired with a complex
+    pole purely because of imaginary-part ordering. With four states an exact
+    4! assignment search is simpler and less error-prone than encoding a
+    heuristic ordering rule.
+    """
+
+    actual_values = [complex(value) for value in actual]
+    return min(
+        max(abs(lhs - rhs) for lhs, rhs in zip(actual_values, candidate, strict=True))
+        for candidate in permutations(desired)
+    )
 
 
 def complex_json(value: complex) -> dict[str, float]:
