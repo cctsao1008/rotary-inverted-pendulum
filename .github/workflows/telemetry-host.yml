@@ -1,0 +1,28 @@
+name: Telemetry host tooling
+
+on:
+  push:
+    paths:
+      - "tools/telemetry/**"
+      - "firmware/communications/telemetry/**"
+      - ".github/workflows/telemetry-host.yml"
+  pull_request:
+    paths:
+      - "tools/telemetry/**"
+      - "firmware/communications/telemetry/**"
+      - ".github/workflows/telemetry-host.yml"
+
+jobs:
+  telemetry-host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile host tooling
+        run: python -m py_compile tools/telemetry/runtime_v1.py tools/telemetry/test_runtime_v1.py
+      - name: Host decoder tests
+        run: python -m unittest discover -s tools/telemetry -p "test_*.py" -v
+      - name: Firmware telemetry contract tests
+        run: cargo test -p rip-telemetry
