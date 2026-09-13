@@ -7,7 +7,7 @@ use rip_control_runtime::ControlCycle;
 use rip_hybrid_control::ControlRegime;
 use rip_plant_observation::RawObservation;
 use rip_robot_domain::EstimatedState;
-use rip_runtime_state::{SensorTimingHealth, WatchdogHealth};
+use rip_runtime_state::{QualificationReasons, SensorTimingHealth, WatchdogHealth};
 
 pub const CYCLE_IDLE: u32 = 0;
 pub const CYCLE_PRIMED: u32 = 1;
@@ -69,7 +69,10 @@ pub fn publish_cycle(cycle: ControlCycle) {
     match cycle {
         ControlCycle::Primed => {
             SHADOW_CYCLE.store(CYCLE_PRIMED, Ordering::Relaxed);
-            SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
+            SHADOW_QUALIFICATION_REASONS.store(
+                u32::from(QualificationReasons::ESTIMATE_NOT_READY.bits()),
+                Ordering::Relaxed,
+            );
             clear_estimated_state_snapshot();
             clear_computed_snapshot();
         }
@@ -248,6 +251,10 @@ mod tests {
         assert_eq!(record.theta_dot_mrad_s, 0);
         assert_eq!(record.phi_mrad, 0);
         assert_eq!(record.phi_dot_mrad_s, 0);
+        assert_eq!(
+            record.qualification_reasons,
+            u32::from(QualificationReasons::ESTIMATE_NOT_READY.bits())
+        );
     }
 
     #[test]
