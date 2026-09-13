@@ -1,16 +1,11 @@
 [package]
 name = "rip-actuator-safety"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 rip-robot-domain = { path = "../../plant/robot-domain" }
 
 [lib]
 path = "src/lib.rs"
-
-# Keep this crate independently testable until it is wired into the production
-# runtime boundary. Integration into the root workspace is intentionally a
-# separate step so the safety policy can be validated without changing D2.
-[workspace]
