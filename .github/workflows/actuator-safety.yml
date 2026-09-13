@@ -1,0 +1,26 @@
+name: Actuator safety
+
+on:
+  push:
+    paths:
+      - "supervisor/actuator-safety/**"
+      - ".github/workflows/actuator-safety.yml"
+  pull_request:
+    paths:
+      - "supervisor/actuator-safety/**"
+      - ".github/workflows/actuator-safety.yml"
+
+jobs:
+  actuator-safety:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --manifest-path supervisor/actuator-safety/Cargo.toml -- --check
+      - name: Test
+        run: cargo test --manifest-path supervisor/actuator-safety/Cargo.toml
+      - name: Clippy
+        run: cargo clippy --manifest-path supervisor/actuator-safety/Cargo.toml --all-targets -- -D warnings
