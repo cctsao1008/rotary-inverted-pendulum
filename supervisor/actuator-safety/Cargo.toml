@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+rip-actuator-model = { path = "../../plant/actuator-model" }
 rip-robot-domain = { path = "../../plant/robot-domain" }
 
 [lib]
