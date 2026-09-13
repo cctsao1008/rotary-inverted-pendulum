@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 340" role="img" aria-labelledby="title desc">
   <title id="title">Rotary mascot</title>
-  <desc id="desc">A cute Furuta-style rotary inverted pendulum with a vertical base axis, horizontal arm, and a pendulum hinge axis perpendicular to the arm.</desc>
+  <desc id="desc">A cute Furuta-style rotary inverted pendulum with a taller smiling base, vertical base axis, horizontal arm, and a pendulum hinge axis perpendicular to the arm.</desc>
 
   <defs>
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
@@ -22,74 +22,76 @@
   </defs>
 
   <!-- soft ground shadow; no opaque background -->
-  <ellipse cx="184" cy="306" rx="115" ry="15" fill="#dfe8ef" opacity="0.72"/>
+  <ellipse cx="184" cy="317" rx="118" ry="15" fill="#dfe8ef" opacity="0.72"/>
 
   <g filter="url(#shadow)">
-    <!-- base -->
-    <ellipse cx="160" cy="253" rx="103" ry="35" fill="#f7f1eb" stroke="#5b463f" stroke-width="6"/>
-    <path d="M57 253v31c0 19 46 35 103 35s103-16 103-35v-31" fill="url(#cream)" stroke="#5b463f" stroke-width="6"/>
-    <ellipse cx="160" cy="253" rx="103" ry="35" fill="#fffaf4" stroke="#5b463f" stroke-width="6"/>
-    <ellipse cx="160" cy="253" rx="83" ry="26" fill="#efe9e2" stroke="#777074" stroke-width="4"/>
+    <!-- taller base body: intentionally deep enough to carry the mascot face -->
+    <ellipse cx="160" cy="231" rx="103" ry="35" fill="#fffaf4" stroke="#5b463f" stroke-width="6"/>
+    <path d="M57 231v62c0 22 46 40 103 40s103-18 103-40v-62" fill="url(#cream)" stroke="#5b463f" stroke-width="6"/>
+    <ellipse cx="160" cy="231" rx="103" ry="35" fill="#fffaf4" stroke="#5b463f" stroke-width="6"/>
+    <ellipse cx="160" cy="231" rx="83" ry="26" fill="#efe9e2" stroke="#777074" stroke-width="4"/>
 
-    <!-- base face -->
-    <circle cx="126" cy="278" r="14" fill="#7d4f36"/>
-    <circle cx="194" cy="278" r="14" fill="#7d4f36"/>
-    <circle cx="131" cy="273" r="5" fill="#ffffff"/>
-    <circle cx="199" cy="273" r="5" fill="#ffffff"/>
-    <ellipse cx="99" cy="291" rx="14" ry="7" fill="#ff9fa5" opacity="0.72"/>
-    <ellipse cx="221" cy="291" rx="14" ry="7" fill="#ff9fa5" opacity="0.72"/>
-    <path d="M145 291 Q160 305 175 291" fill="none" stroke="#5b463f" stroke-width="5" stroke-linecap="round"/>
+    <!-- larger base face -->
+    <circle cx="122" cy="280" r="20" fill="#7d4f36"/>
+    <circle cx="198" cy="280" r="20" fill="#7d4f36"/>
+    <circle cx="129" cy="272" r="7" fill="#ffffff"/>
+    <circle cx="205" cy="272" r="7" fill="#ffffff"/>
+    <circle cx="117" cy="286" r="4" fill="#ffffff" opacity="0.72"/>
+    <circle cx="193" cy="286" r="4" fill="#ffffff" opacity="0.72"/>
+    <ellipse cx="86" cy="302" rx="18" ry="9" fill="#ff9fa5" opacity="0.76"/>
+    <ellipse cx="234" cy="302" rx="18" ry="9" fill="#ff9fa5" opacity="0.76"/>
+    <path d="M140 301 Q160 321 180 301" fill="none" stroke="#5b463f" stroke-width="6" stroke-linecap="round"/>
 
     <!-- vertical rotary shaft: z-axis -->
-    <ellipse cx="160" cy="224" rx="31" ry="12" fill="#56575c" stroke="#5b463f" stroke-width="5"/>
-    <rect x="129" y="184" width="62" height="40" rx="12" fill="url(#metal)" stroke="#5b463f" stroke-width="5"/>
-    <ellipse cx="160" cy="184" rx="31" ry="12" fill="#77797f" stroke="#5b463f" stroke-width="5"/>
-    <ellipse cx="160" cy="184" rx="14" ry="6" fill="#fff7ef" opacity="0.9"/>
+    <ellipse cx="160" cy="203" rx="31" ry="12" fill="#56575c" stroke="#5b463f" stroke-width="5"/>
+    <rect x="129" y="163" width="62" height="40" rx="12" fill="url(#metal)" stroke="#5b463f" stroke-width="5"/>
+    <ellipse cx="160" cy="163" rx="31" ry="12" fill="#77797f" stroke="#5b463f" stroke-width="5"/>
+    <ellipse cx="160" cy="163" rx="14" ry="6" fill="#fff7ef" opacity="0.9"/>
 
     <!-- horizontal rotary arm -->
-    <path d="M177 181 L304 173 Q315 172 320 181 L321 193 Q318 204 307 206 L178 211 Z" fill="url(#arm)" stroke="#5b463f" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M188 187 L296 181" stroke="#aeb2b8" stroke-width="4" stroke-linecap="round" opacity="0.65"/>
+    <path d="M177 160 L304 152 Q315 151 320 160 L321 172 Q318 183 307 185 L178 190 Z" fill="url(#arm)" stroke="#5b463f" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M188 166 L296 160" stroke="#aeb2b8" stroke-width="4" stroke-linecap="round" opacity="0.65"/>
 
     <!-- distal hinge yoke: hinge axis is horizontal in 3-D and perpendicular to arm -->
-    <path d="M300 161 q0-12 12-15 l18-5 q12-3 17 8 l4 16 -13 5 -5-11 -14 4 v44 l14 4 5-11 13 5-4 16 q-5 11-17 8 l-18-5 q-12-3-12-15z" fill="#45464b" stroke="#5b463f" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M300 140 q0-12 12-15 l18-5 q12-3 17 8 l4 16 -13 5 -5-11 -14 4 v44 l14 4 5-11 13 5-4 16 q-5 11-17 8 l-18-5 q-12-3-12-15z" fill="#45464b" stroke="#5b463f" stroke-width="5" stroke-linejoin="round"/>
 
     <!-- hinge axle shown in perspective, crossing the yoke front-to-back -->
-    <g transform="rotate(-12 326 185)">
-      <rect x="306" y="177" width="40" height="16" rx="8" fill="#d5d6d8" stroke="#5b463f" stroke-width="4"/>
-      <ellipse cx="307" cy="185" rx="7" ry="8" fill="#f7f1eb" stroke="#5b463f" stroke-width="3"/>
-      <ellipse cx="346" cy="185" rx="7" ry="8" fill="#9fa2a7" stroke="#5b463f" stroke-width="3"/>
+    <g transform="rotate(-12 326 164)">
+      <rect x="306" y="156" width="40" height="16" rx="8" fill="#d5d6d8" stroke="#5b463f" stroke-width="4"/>
+      <ellipse cx="307" cy="164" rx="7" ry="8" fill="#f7f1eb" stroke="#5b463f" stroke-width="3"/>
+      <ellipse cx="346" cy="164" rx="7" ry="8" fill="#9fa2a7" stroke="#5b463f" stroke-width="3"/>
     </g>
 
     <!-- pendulum hub attached to hinge axle -->
-    <circle cx="327" cy="184" r="17" fill="#55565b" stroke="#5b463f" stroke-width="5"/>
-    <circle cx="327" cy="184" r="7" fill="#f7f1eb"/>
+    <circle cx="327" cy="163" r="17" fill="#55565b" stroke="#5b463f" stroke-width="5"/>
+    <circle cx="327" cy="163" r="7" fill="#f7f1eb"/>
 
     <!-- pendulum rod: free to swing in vertical plane -->
-    <g transform="rotate(7 327 184)">
-      <rect x="306" y="52" width="42" height="137" rx="20" fill="url(#cream)" stroke="#5b463f" stroke-width="6"/>
-      <ellipse cx="327" cy="56" rx="19" ry="8" fill="#67686d" stroke="#5b463f" stroke-width="5"/>
-      <ellipse cx="327" cy="56" rx="9" ry="4" fill="#fff7ef"/>
+    <g transform="rotate(7 327 163)">
+      <rect x="306" y="31" width="42" height="137" rx="20" fill="url(#cream)" stroke="#5b463f" stroke-width="6"/>
+      <ellipse cx="327" cy="35" rx="19" ry="8" fill="#67686d" stroke="#5b463f" stroke-width="5"/>
+      <ellipse cx="327" cy="35" rx="9" ry="4" fill="#fff7ef"/>
 
       <!-- pendulum face -->
-      <circle cx="319" cy="102" r="8" fill="#7d4f36"/>
-      <circle cx="338" cy="102" r="8" fill="#7d4f36"/>
-      <circle cx="322" cy="99" r="3" fill="#ffffff"/>
-      <circle cx="341" cy="99" r="3" fill="#ffffff"/>
-      <ellipse cx="309" cy="116" rx="8" ry="4" fill="#ff9fa5" opacity="0.72"/>
-      <ellipse cx="348" cy="116" rx="8" ry="4" fill="#ff9fa5" opacity="0.72"/>
-      <path d="M321 116 Q328 123 335 116" fill="none" stroke="#5b463f" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="319" cy="81" r="8" fill="#7d4f36"/>
+      <circle cx="338" cy="81" r="8" fill="#7d4f36"/>
+      <circle cx="322" cy="78" r="3" fill="#ffffff"/>
+      <circle cx="341" cy="78" r="3" fill="#ffffff"/>
+      <ellipse cx="309" cy="95" rx="8" ry="4" fill="#ff9fa5" opacity="0.72"/>
+      <ellipse cx="348" cy="95" rx="8" ry="4" fill="#ff9fa5" opacity="0.72"/>
+      <path d="M321 95 Q328 102 335 95" fill="none" stroke="#5b463f" stroke-width="4" stroke-linecap="round"/>
     </g>
   </g>
 
   <!-- base rotation cue about vertical axis -->
-  <path d="M70 225 C91 198 119 188 143 187" fill="none" stroke="#83bce6" stroke-width="7" stroke-linecap="round"/>
-  <path d="M69 225 l5-17 14 10" fill="none" stroke="#83bce6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M254 225 C237 208 218 197 199 192" fill="none" stroke="#83bce6" stroke-width="7" stroke-linecap="round" opacity="0.78"/>
+  <path d="M70 204 C91 177 119 167 143 166" fill="none" stroke="#83bce6" stroke-width="7" stroke-linecap="round"/>
+  <path d="M69 204 l5-17 14 10" fill="none" stroke="#83bce6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M254 204 C237 187 218 176 199 171" fill="none" stroke="#83bce6" stroke-width="7" stroke-linecap="round" opacity="0.78"/>
 
   <!-- pendulum swing cues in vertical plane -->
-  <path d="M286 93 q-15 20 -6 40" fill="none" stroke="#b9a4d8" stroke-width="6" stroke-linecap="round"/>
-  <path d="M366 91 q15 20 7 40" fill="none" stroke="#b9a4d8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M286 72 q-15 20 -6 40" fill="none" stroke="#b9a4d8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M366 70 q15 20 7 40" fill="none" stroke="#b9a4d8" stroke-width="6" stroke-linecap="round"/>
 
   <!-- energetic accent -->
-  <path d="M352 46 l10-13 M364 59 l17-4 M346 32 l2-16" stroke="#f6b93b" stroke-width="7" stroke-linecap="round"/>
+  <path d="M352 25 l10-13 M364 38 l17-4 M346 11 l2-8" stroke="#f6b93b" stroke-width="7" stroke-linecap="round"/>
 </svg>
