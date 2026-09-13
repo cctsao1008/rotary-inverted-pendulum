@@ -448,7 +448,10 @@ mod tests {
             ControlCycle::Computed { authorized, .. } => assert!(authorized.is_some()),
             _ => panic!("admitted second observation must compute"),
         }
-        assert_eq!(runtime.runtime_state(), RuntimeState::Active(ControlRegime::Balance));
+        assert_eq!(
+            runtime.runtime_state(),
+            RuntimeState::Active(ControlRegime::Balance)
+        );
         assert!(runtime.last_admission_decision().unwrap().allowed);
         assert!(runtime.last_run_permit_decision().unwrap().allowed);
     }

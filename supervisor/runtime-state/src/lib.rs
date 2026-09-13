@@ -458,7 +458,10 @@ impl RuntimePolicy {
         if context.authority_mode != AuthorityMode::Disarmed {
             reasons = reasons.with(AdmissionReasons::AUTHORITY_BUSY);
         }
-        if matches!(request.regime(), ControlRegime::Capture | ControlRegime::Balance) {
+        if matches!(
+            request.regime(),
+            ControlRegime::Capture | ControlRegime::Balance
+        ) {
             if let Some(limits) = limits {
                 if state.theta.0.abs() > limits.max_abs_near_upright_entry_theta_rad {
                     reasons = reasons.with(AdmissionReasons::ENTRY_THETA);
@@ -743,7 +746,9 @@ fn exceeds(value: f32, limit: Option<f32>) -> bool {
 mod tests {
     use super::*;
     use rip_actuator_model::BoundedActuatorCommand;
-    use rip_robot_domain::{AngleRad, AngularRateRadPerSec, NormalizedCommand, TimestampUs, TorqueNm};
+    use rip_robot_domain::{
+        AngleRad, AngularRateRadPerSec, NormalizedCommand, TimestampUs, TorqueNm,
+    };
 
     fn command(saturated: bool) -> BoundedActuatorCommand {
         BoundedActuatorCommand {
@@ -811,7 +816,9 @@ mod tests {
     fn swing_up_admission_does_not_require_near_upright_angle() {
         let limits = AdmissionLimits::new(0.20).unwrap();
         let request = ClosedLoopRequest::new(ControlRegime::SwingUp);
-        assert!(RuntimePolicy::admit(request, state(3.0), admission_context(), Some(limits)).allowed);
+        assert!(
+            RuntimePolicy::admit(request, state(3.0), admission_context(), Some(limits)).allowed
+        );
     }
 
     #[test]
