@@ -1,13 +1,28 @@
 <p align="center">
-  <img src="assets/rotary.png" width="1024" alt="Bividi mascot — two warm hand-drawn eyes">
+  <img src="assets/rotary.png" width="420" alt="Rotary inverted pendulum mascot">
 </p>
 
-# 🌀 Rotary Inverted Pendulum
+<h1 align="center">Rotary</h1>
 
-A Rust-first, `no_std` control system for a Furuta-style rotary inverted pendulum.
+<p align="center">
+  <strong>Rotary Inverted Pendulum Control Research</strong>
+</p>
 
-> **An unstable plant with a very stable chain of authority.**  
-> Swing up, capture, balance — but never confuse evidence, control intent, and permission to move.
+<p align="center">
+  <strong>Swing hard. Capture cleanly. Respect the physics.</strong>
+</p>
+
+<p align="center">
+  <em>Build momentum. Question the model. Earn the authority.</em>
+</p>
+
+<p align="center">
+  🌀 Swing &nbsp;·&nbsp; 🎯 Capture &nbsp;·&nbsp; ⚖️ Balance &nbsp;·&nbsp; 🔬 Validate
+</p>
+
+Rotary is a Rust-first, `no_std` control system for a Furuta-style rotary inverted pendulum. It keeps physical evidence, estimated state, control intent, actuator limits, runtime authority, and electrical realization deliberately separate so that controller confidence never becomes permission to move by accident.
+
+> **An unstable plant with a very stable chain of authority.** Swing up, capture, balance — but never confuse evidence, control intent, and permission to move.
 
 This project is a ground-up re-architecture from physical I/O to hybrid control. It shares one architectural grammar with `single-wheel-platform`: **same architecture, different plant**.
 
