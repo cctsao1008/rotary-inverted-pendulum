@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 rip-actuation-interface = { path = "../../firmware/interfaces/actuation" }
 rip-actuator-model = { path = "../../plant/actuator-model" }
+rip-actuator-safety = { path = "../../supervisor/actuator-safety" }
 rip-control-runtime = { path = "../../supervisor/control-runtime" }
 rip-estimator-input-adapter = { path = "../../firmware/adapters/estimator-input" }
 rip-hybrid-control = { path = "../../control/hybrid-control" }
