@@ -417,9 +417,7 @@ where
 mod tests {
     use super::*;
     use rip_actuator_model::ArmActuatorParameters;
-    use rip_actuator_safety::{
-        CommandConstraintReasons, CommandSafetyLimits, SafetyProfileKind,
-    };
+    use rip_actuator_safety::{CommandConstraintReasons, CommandSafetyLimits, SafetyProfileKind};
     use rip_hybrid_control::ControlRegime;
     use rip_robot_domain::{AngleRad, NormalizedCommand, TimestampUs};
     use rip_runtime_state::ActuationAuthority;
@@ -602,7 +600,10 @@ mod tests {
             .request_closed_loop(ClosedLoopRequest::new(ControlRegime::Balance))
             .unwrap();
         assert_eq!(runtime.step().unwrap(), ControlCycle::Primed);
-        assert!(matches!(runtime.step().unwrap(), ControlCycle::Computed { .. }));
+        assert!(matches!(
+            runtime.step().unwrap(),
+            ControlCycle::Computed { .. }
+        ));
 
         let replacement = CommandSafetyProfile::new(
             SafetyProfileKind::Simulation,
