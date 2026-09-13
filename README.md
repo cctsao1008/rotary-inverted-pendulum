@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/rotary.png" width="1024" alt="Bividi mascot — two warm hand-drawn eyes">
+</p>
+
 # 🌀 Rotary Inverted Pendulum
 
 A Rust-first, `no_std` control system for a Furuta-style rotary inverted pendulum.
