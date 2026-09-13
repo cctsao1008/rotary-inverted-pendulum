@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "lane": "omnisim-newton-rigid-body-counterexample",
+  "scope": "model-structure validation only; not Forest D1 specimen calibration",
+  "repository": "omnilink-tech/omnisim",
+  "release": "v8.5.1",
+  "commit": "0b9b07f5b646295bf4599a06e30f616b99090581",
+  "minimum_semantics_release": "v8.4.0",
+  "newton_version": "1.5.0",
+  "solver": {
+    "world_field": "mujoco",
+    "execution": "CPU mj_step",
+    "cross_machine_bitwise_reproducibility": "unverified"
+  },
+  "timing": {
+    "basic_time_step_ms": 1.0,
+    "newton_substeps": 20,
+    "nominal_internal_substep_s": 0.00005
+  },
+  "required_environment": {
+    "OMNISIM_NEWTON_TORQUE_MODE": "1"
+  },
+  "forbidden_reversion_environment": [
+    "OMNISIM_URDF_USE_INERTIA=0",
+    "OMNISIM_NEWTON_INERTIA_COM=0",
+    "OMNISIM_NEWTON_SPAWN_AT_POSITION=0"
+  ],
+  "semantic_requirements": {
+    "urdf_inertia_and_link_com_reach_solver": "v8.4.0 or later",
+    "authored_nonzero_joint_position_reaches_first_physics_step": "v8.4.0 or later",
+    "legacy_Physics.damping_is_not_used": true,
+    "probe_joint_damping_policy": "zero in generated diagnostic URDF"
+  }
+}
