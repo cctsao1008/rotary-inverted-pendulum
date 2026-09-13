@@ -71,29 +71,63 @@ jobs:
           cmp target/sitl-run-a/summary.json target/sitl-run-b/summary.json
       - name: Rotary full semantic-path SITL
         run: |
-          rm -rf target/sitl-balance-a target/sitl-balance-b target/sitl-swingup
+          rm -rf \
+            target/sitl-balance-qnet-a \
+            target/sitl-balance-qnet-b \
+            target/sitl-balance-pole-c1 \
+            target/sitl-balance-pole-c2 \
+            target/sitl-swingup
+
           cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_balance.toml \
             --parameters parameters/reference-assembly.json \
-            --output target/sitl-balance-a \
+            --balance-controller qnet_lqr \
+            --output target/sitl-balance-qnet-a \
             --system-identifier rotary-inverted-pendulum \
             --git-commit "$GITHUB_SHA"
           cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_balance.toml \
             --parameters parameters/reference-assembly.json \
-            --output target/sitl-balance-b \
+            --balance-controller qnet_lqr \
+            --output target/sitl-balance-qnet-b \
             --system-identifier rotary-inverted-pendulum \
             --git-commit "$GITHUB_SHA"
-          cmp target/sitl-balance-a/manifest.json target/sitl-balance-b/manifest.json
-          cmp target/sitl-balance-a/trace.jsonl target/sitl-balance-b/trace.jsonl
-          cmp target/sitl-balance-a/summary.json target/sitl-balance-b/summary.json
+          cmp target/sitl-balance-qnet-a/manifest.json target/sitl-balance-qnet-b/manifest.json
+          cmp target/sitl-balance-qnet-a/trace.jsonl target/sitl-balance-qnet-b/trace.jsonl
+          cmp target/sitl-balance-qnet-a/summary.json target/sitl-balance-qnet-b/summary.json
           python tools/sitl/check_rotary_balance.py \
             --scenario tools/sitl/scenarios/rotary_balance.toml \
-            --summary target/sitl-balance-a/summary.json \
-            --trace target/sitl-balance-a/trace.jsonl
+            --summary target/sitl-balance-qnet-a/summary.json \
+            --trace target/sitl-balance-qnet-a/trace.jsonl
+
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --parameters parameters/reference-assembly.json \
+            --balance-controller pole_placement_c1 \
+            --output target/sitl-balance-pole-c1 \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
+          python tools/sitl/check_rotary_balance.py \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --summary target/sitl-balance-pole-c1/summary.json \
+            --trace target/sitl-balance-pole-c1/trace.jsonl
+
+          cargo run -p rip-sitl --release --bin rip-sitl -- \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --parameters parameters/reference-assembly.json \
+            --balance-controller pole_placement_c2 \
+            --output target/sitl-balance-pole-c2 \
+            --system-identifier rotary-inverted-pendulum \
+            --git-commit "$GITHUB_SHA"
+          python tools/sitl/check_rotary_balance.py \
+            --scenario tools/sitl/scenarios/rotary_balance.toml \
+            --summary target/sitl-balance-pole-c2/summary.json \
+            --trace target/sitl-balance-pole-c2/trace.jsonl
+
           cargo run -p rip-sitl --release --bin rip-sitl -- \
             --scenario tools/sitl/scenarios/rotary_swingup.toml \
             --parameters parameters/reference-assembly.json \
+            --balance-controller qnet_lqr \
             --output target/sitl-swingup \
             --system-identifier rotary-inverted-pendulum \
             --git-commit "$GITHUB_SHA"
