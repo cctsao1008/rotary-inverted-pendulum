@@ -300,6 +300,208 @@ pub enum AuthorityMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ClosedLoopRequest {
+    regime: ControlRegime,
+}
+
+impl ClosedLoopRequest {
+    pub const fn new(regime: ControlRegime) -> Self {
+        Self { regime }
+    }
+
+    pub const fn regime(self) -> ControlRegime {
+        self.regime
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AdmissionLimits {
+    pub max_abs_near_upright_entry_theta_rad: f32,
+}
+
+impl AdmissionLimits {
+    pub fn new(max_abs_near_upright_entry_theta_rad: f32) -> Option<Self> {
+        let candidate = Self {
+            max_abs_near_upright_entry_theta_rad,
+        };
+        candidate.is_valid().then_some(candidate)
+    }
+
+    pub fn is_valid(self) -> bool {
+        positive(self.max_abs_near_upright_entry_theta_rad)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AdmissionReasons(u16);
+
+impl AdmissionReasons {
+    pub const NONE: Self = Self(0);
+    pub const LIMIT_CONFIG: Self = Self(1 << 0);
+    pub const RUNTIME_STATE: Self = Self(1 << 1);
+    pub const SENSOR_TIMING: Self = Self(1 << 2);
+    pub const WATCHDOG: Self = Self(1 << 3);
+    pub const ESTIMATE_INVALID: Self = Self(1 << 4);
+    pub const RUNTIME_QUALIFICATION: Self = Self(1 << 5);
+    pub const AUTHORITY_BUSY: Self = Self(1 << 6);
+    pub const ENTRY_THETA: Self = Self(1 << 7);
+
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    const fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AdmissionContext {
+    pub runtime_state: RuntimeState,
+    pub timing: SensorTimingHealth,
+    pub watchdog: WatchdogHealth,
+    pub estimate_validity: StateValidity,
+    pub runtime_qualified: bool,
+    pub authority_mode: AuthorityMode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AdmissionDecision {
+    pub allowed: bool,
+    pub reasons: AdmissionReasons,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RunPermitReasons(u16);
+
+impl RunPermitReasons {
+    pub const NONE: Self = Self(0);
+    pub const RUNTIME_STATE: Self = Self(1 << 0);
+    pub const SENSOR_TIMING: Self = Self(1 << 1);
+    pub const WATCHDOG: Self = Self(1 << 2);
+    pub const ESTIMATE_INVALID: Self = Self(1 << 3);
+    pub const RUNTIME_QUALIFICATION: Self = Self(1 << 4);
+    pub const AUTHORITY: Self = Self(1 << 5);
+
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    const fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RunPermitContext {
+    pub runtime_state: RuntimeState,
+    pub timing: SensorTimingHealth,
+    pub watchdog: WatchdogHealth,
+    pub estimate_validity: StateValidity,
+    pub runtime_qualified: bool,
+    pub authority_mode: AuthorityMode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RunPermitDecision {
+    pub allowed: bool,
+    pub reasons: RunPermitReasons,
+}
+
+impl RuntimePolicy {
+    pub fn admit(
+        request: ClosedLoopRequest,
+        state: EstimatedState,
+        context: AdmissionContext,
+        limits: Option<AdmissionLimits>,
+    ) -> AdmissionDecision {
+        let mut reasons = AdmissionReasons::NONE;
+
+        let limits = match limits {
+            Some(limits) if limits.is_valid() => Some(limits),
+            _ => {
+                reasons = reasons.with(AdmissionReasons::LIMIT_CONFIG);
+                None
+            }
+        };
+        if context.runtime_state != RuntimeState::Ready {
+            reasons = reasons.with(AdmissionReasons::RUNTIME_STATE);
+        }
+        if !context.timing.closed_loop_eligible() {
+            reasons = reasons.with(AdmissionReasons::SENSOR_TIMING);
+        }
+        if context.watchdog != WatchdogHealth::Healthy {
+            reasons = reasons.with(AdmissionReasons::WATCHDOG);
+        }
+        if context.estimate_validity != StateValidity::Valid || !state.is_finite() {
+            reasons = reasons.with(AdmissionReasons::ESTIMATE_INVALID);
+        }
+        if !context.runtime_qualified {
+            reasons = reasons.with(AdmissionReasons::RUNTIME_QUALIFICATION);
+        }
+        if context.authority_mode != AuthorityMode::Disarmed {
+            reasons = reasons.with(AdmissionReasons::AUTHORITY_BUSY);
+        }
+        if matches!(request.regime(), ControlRegime::Capture | ControlRegime::Balance) {
+            if let Some(limits) = limits {
+                if state.theta.0.abs() > limits.max_abs_near_upright_entry_theta_rad {
+                    reasons = reasons.with(AdmissionReasons::ENTRY_THETA);
+                }
+            }
+        }
+
+        AdmissionDecision {
+            allowed: reasons.is_empty(),
+            reasons,
+        }
+    }
+
+    pub fn run_permit(context: RunPermitContext) -> RunPermitDecision {
+        let mut reasons = RunPermitReasons::NONE;
+
+        if !matches!(context.runtime_state, RuntimeState::Active(_)) {
+            reasons = reasons.with(RunPermitReasons::RUNTIME_STATE);
+        }
+        if !context.timing.closed_loop_eligible() {
+            reasons = reasons.with(RunPermitReasons::SENSOR_TIMING);
+        }
+        if context.watchdog != WatchdogHealth::Healthy {
+            reasons = reasons.with(RunPermitReasons::WATCHDOG);
+        }
+        if context.estimate_validity != StateValidity::Valid {
+            reasons = reasons.with(RunPermitReasons::ESTIMATE_INVALID);
+        }
+        if !context.runtime_qualified {
+            reasons = reasons.with(RunPermitReasons::RUNTIME_QUALIFICATION);
+        }
+        if context.authority_mode != AuthorityMode::ClosedLoop {
+            reasons = reasons.with(RunPermitReasons::AUTHORITY);
+        }
+
+        RunPermitDecision {
+            allowed: reasons.is_empty(),
+            reasons,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ActuationAuthority {
     Denied,
     ClosedLoop,
@@ -522,9 +724,13 @@ impl RuntimeAuthority {
     }
 }
 
+fn positive(value: f32) -> bool {
+    value.is_finite() && value > 0.0
+}
+
 fn valid_limit(limit: Option<f32>) -> bool {
     match limit {
-        Some(value) => value.is_finite() && value > 0.0,
+        Some(value) => positive(value),
         None => true,
     }
 }
@@ -537,13 +743,24 @@ fn exceeds(value: f32, limit: Option<f32>) -> bool {
 mod tests {
     use super::*;
     use rip_actuator_model::BoundedActuatorCommand;
-    use rip_robot_domain::{NormalizedCommand, TorqueNm};
+    use rip_robot_domain::{AngleRad, AngularRateRadPerSec, NormalizedCommand, TimestampUs, TorqueNm};
 
     fn command(saturated: bool) -> BoundedActuatorCommand {
         BoundedActuatorCommand {
             command: NormalizedCommand::new(0.25).unwrap(),
             saturated,
             predicted_arm_torque: TorqueNm(0.05),
+        }
+    }
+
+    fn state(theta: f32) -> EstimatedState {
+        EstimatedState {
+            timestamp: TimestampUs(1_000),
+            theta: AngleRad(theta),
+            theta_dot: AngularRateRadPerSec(0.0),
+            phi: AngleRad(0.0),
+            phi_dot: AngularRateRadPerSec(0.0),
+            validity: StateValidity::Valid,
         }
     }
 
@@ -555,6 +772,60 @@ mod tests {
             estimate_validity: StateValidity::Valid,
             runtime_qualified: true,
         }
+    }
+
+    fn admission_context() -> AdmissionContext {
+        AdmissionContext {
+            runtime_state: RuntimeState::Ready,
+            timing: SensorTimingHealth::Healthy,
+            watchdog: WatchdogHealth::Healthy,
+            estimate_validity: StateValidity::Valid,
+            runtime_qualified: true,
+            authority_mode: AuthorityMode::Disarmed,
+        }
+    }
+
+    #[test]
+    fn balance_admission_applies_entry_angle_only_at_admission() {
+        let limits = AdmissionLimits::new(0.20).unwrap();
+        let request = ClosedLoopRequest::new(ControlRegime::Balance);
+        let denied = RuntimePolicy::admit(request, state(0.25), admission_context(), Some(limits));
+        assert!(!denied.allowed);
+        assert!(denied.reasons.contains(AdmissionReasons::ENTRY_THETA));
+
+        let allowed = RuntimePolicy::admit(request, state(0.10), admission_context(), Some(limits));
+        assert!(allowed.allowed);
+
+        let permit = RuntimePolicy::run_permit(RunPermitContext {
+            runtime_state: RuntimeState::Active(ControlRegime::Balance),
+            timing: SensorTimingHealth::Healthy,
+            watchdog: WatchdogHealth::Healthy,
+            estimate_validity: StateValidity::Valid,
+            runtime_qualified: true,
+            authority_mode: AuthorityMode::ClosedLoop,
+        });
+        assert!(permit.allowed);
+    }
+
+    #[test]
+    fn swing_up_admission_does_not_require_near_upright_angle() {
+        let limits = AdmissionLimits::new(0.20).unwrap();
+        let request = ClosedLoopRequest::new(ControlRegime::SwingUp);
+        assert!(RuntimePolicy::admit(request, state(3.0), admission_context(), Some(limits)).allowed);
+    }
+
+    #[test]
+    fn run_permit_drops_on_timing_loss_without_reusing_entry_angle() {
+        let permit = RuntimePolicy::run_permit(RunPermitContext {
+            runtime_state: RuntimeState::Active(ControlRegime::Balance),
+            timing: SensorTimingHealth::Timeout,
+            watchdog: WatchdogHealth::Healthy,
+            estimate_validity: StateValidity::Valid,
+            runtime_qualified: true,
+            authority_mode: AuthorityMode::ClosedLoop,
+        });
+        assert!(!permit.allowed);
+        assert!(permit.reasons.contains(RunPermitReasons::SENSOR_TIMING));
     }
 
     #[test]

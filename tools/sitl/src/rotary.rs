@@ -21,8 +21,8 @@ use rip_plant_observation::{
 };
 use rip_robot_domain::{EstimatedState, TimestampUs, TorqueNm};
 use rip_runtime_state::{
-    ActuationAuthority, AuthorizedActuation, ControlWatchdog, RuntimeLimits, RuntimeState,
-    SensorTimingLimits, SensorTimingMonitor,
+    ActuationAuthority, AdmissionLimits, AuthorizedActuation, ClosedLoopRequest, ControlWatchdog,
+    RuntimeLimits, SensorTimingLimits, SensorTimingMonitor,
 };
 use rip_state_estimator::EstimatorConfig;
 use rip_state_feedback::{
@@ -356,10 +356,13 @@ impl RotarySitlSystem {
             controller,
             actuator_model,
         );
+        runtime.configure_admission_limits(
+            AdmissionLimits::new(CAPTURE_ENTER_ANGLE_RAD)
+                .ok_or_else(|| boxed("invalid SITL closed-loop admission limits"))?,
+        );
         runtime
-            .authority_mut()
-            .enter_closed_loop()
-            .map_err(|error| boxed(format!("runtime authority setup: {error:?}")))?;
+            .request_closed_loop(ClosedLoopRequest::new(last_regime))
+            .map_err(|error| boxed(format!("runtime closed-loop request: {error:?}")))?;
 
         let late_after_us = sensor_period_us
             .checked_mul(5)
@@ -477,9 +480,6 @@ impl RotarySitlSystem {
 
     fn production_runtime(&mut self, at: VirtualTime) -> Result<Value, Box<dyn Error>> {
         self.pending_authorized = None;
-        let active_regime = self.runtime.controller().regime();
-        self.runtime
-            .set_runtime_state(RuntimeState::Active(active_regime));
         let cycle = self
             .runtime
             .step()
@@ -498,11 +498,27 @@ impl RotarySitlSystem {
             self.last_regime = new_regime;
         }
 
+        let admission = self.runtime.last_admission_decision();
+        let run_permit = self.runtime.last_run_permit_decision();
+        let supervisor = json!({
+            "runtime_state": format!("{:?}", self.runtime.runtime_state()),
+            "closed_loop_requested": self.runtime.closed_loop_requested(),
+            "admission": admission.map(|decision| json!({
+                "allowed": decision.allowed,
+                "reasons_bits": decision.reasons.bits()
+            })),
+            "run_permit": run_permit.map(|decision| json!({
+                "allowed": decision.allowed,
+                "reasons_bits": decision.reasons.bits()
+            }))
+        });
+
         let payload = match cycle {
             ControlCycle::Primed => json!({
                 "true_plant_state": state_json(self.plant.state()),
                 "runtime_cycle": "primed",
                 "control_regime": regime_name(new_regime),
+                "supervisor": supervisor,
                 "authorized_actuation_present": false
             }),
             ControlCycle::Rejected { qualification } => {
@@ -512,6 +528,7 @@ impl RotarySitlSystem {
                     "runtime_cycle": "rejected",
                     "control_regime": regime_name(new_regime),
                     "qualification_reasons_bits": qualification.reasons.bits(),
+                    "supervisor": supervisor,
                     "authorized_actuation_present": false
                 })
             }
@@ -546,6 +563,7 @@ impl RotarySitlSystem {
                         "saturated": bounded_command.saturated,
                         "predicted_arm_torque_nm": bounded_command.predicted_arm_torque.0
                     },
+                    "supervisor": supervisor,
                     "authority": match authority.authority {
                         ActuationAuthority::Denied => "denied",
                         ActuationAuthority::ClosedLoop => "closed_loop"
@@ -823,6 +841,8 @@ mod tests {
             assert!(artifacts
                 .trace_jsonl
                 .contains("authorized_actuation_present"));
+            assert!(artifacts.trace_jsonl.contains("\"admission\""));
+            assert!(artifacts.trace_jsonl.contains("\"run_permit\""));
         }
     }
 
