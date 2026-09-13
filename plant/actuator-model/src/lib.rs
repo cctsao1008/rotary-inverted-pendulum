@@ -268,7 +268,10 @@ mod tests {
         let inside_deadzone = NormalizedCommand::new(0.05).unwrap();
         let half_effective = NormalizedCommand::new(0.55).unwrap();
 
-        assert_eq!(model().predicted_torque_for_command(inside_deadzone), TorqueNm(0.0));
+        assert_eq!(
+            model().predicted_torque_for_command(inside_deadzone),
+            TorqueNm(0.0)
+        );
         assert!((model().predicted_torque_for_command(half_effective).0 - 0.1).abs() < 1.0e-6);
     }
 
