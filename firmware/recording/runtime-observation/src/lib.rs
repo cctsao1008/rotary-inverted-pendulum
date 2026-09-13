@@ -70,12 +70,17 @@ pub fn publish_cycle(cycle: ControlCycle) {
         ControlCycle::Primed => {
             SHADOW_CYCLE.store(CYCLE_PRIMED, Ordering::Relaxed);
             SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
+            clear_estimated_state_snapshot();
             clear_computed_snapshot();
         }
         ControlCycle::Rejected { qualification } => {
             SHADOW_CYCLE.store(CYCLE_REJECTED, Ordering::Relaxed);
             SHADOW_QUALIFICATION_REASONS
                 .store(u32::from(qualification.reasons.bits()), Ordering::Relaxed);
+            // Rejected cycles do not carry an EstimatedState in the runtime
+            // record contract. Keeping the previous cycle's state here would
+            // falsely pair stale derivatives with the new raw observation.
+            clear_estimated_state_snapshot();
             clear_computed_snapshot();
         }
         ControlCycle::Computed {
@@ -108,6 +113,7 @@ pub fn publish_cycle(cycle: ControlCycle) {
 pub fn publish_cycle_error() {
     SHADOW_CYCLE.store(CYCLE_ERROR, Ordering::Relaxed);
     SHADOW_QUALIFICATION_REASONS.store(0, Ordering::Relaxed);
+    clear_estimated_state_snapshot();
     clear_computed_snapshot();
 }
 
@@ -149,6 +155,13 @@ pub fn snapshot() -> RuntimeRecordSnapshot {
     }
 }
 
+fn clear_estimated_state_snapshot() {
+    SHADOW_THETA_MRAD.store(0, Ordering::Relaxed);
+    SHADOW_THETA_DOT_MRAD_S.store(0, Ordering::Relaxed);
+    SHADOW_PHI_MRAD.store(0, Ordering::Relaxed);
+    SHADOW_PHI_DOT_MRAD_S.store(0, Ordering::Relaxed);
+}
+
 fn clear_computed_snapshot() {
     SHADOW_DEMAND_TORQUE_UNM.store(0, Ordering::Relaxed);
     SHADOW_BOUNDED_COMMAND_PPM.store(0, Ordering::Relaxed);
@@ -179,6 +192,7 @@ const fn watchdog_code(health: WatchdogHealth) -> u32 {
         WatchdogHealth::Disarmed => 0,
         WatchdogHealth::Healthy => 1,
         WatchdogHealth::Expired => 2,
+        _ => 0,
     }
 }
 
@@ -204,10 +218,50 @@ fn scale(value: f32, factor: f32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rip_robot_domain::{AngleRad, AngularRateRadPerSec, StateValidity, TimestampUs};
+
+    fn state() -> EstimatedState {
+        EstimatedState {
+            timestamp: TimestampUs(10_000),
+            theta: AngleRad(0.25),
+            theta_dot: AngularRateRadPerSec(12.5),
+            phi: AngleRad(-0.5),
+            phi_dot: AngularRateRadPerSec(-7.5),
+            validity: StateValidity::Valid,
+        }
+    }
 
     #[test]
     fn scaling_saturates_at_i32_bounds() {
         assert_eq!(scale(f32::MAX, 1.0), i32::MAX);
         assert_eq!(scale(-f32::MAX, 1.0), i32::MIN);
+    }
+
+    #[test]
+    fn primed_cycle_cannot_expose_previous_estimated_state() {
+        publish_state(state());
+        assert_ne!(snapshot().theta_dot_mrad_s, 0);
+
+        publish_cycle(ControlCycle::Primed);
+        let record = snapshot();
+        assert_eq!(record.cycle, CYCLE_PRIMED);
+        assert_eq!(record.theta_mrad, 0);
+        assert_eq!(record.theta_dot_mrad_s, 0);
+        assert_eq!(record.phi_mrad, 0);
+        assert_eq!(record.phi_dot_mrad_s, 0);
+    }
+
+    #[test]
+    fn cycle_error_cannot_expose_previous_estimated_state() {
+        publish_state(state());
+        assert_ne!(snapshot().phi_dot_mrad_s, 0);
+
+        publish_cycle_error();
+        let record = snapshot();
+        assert_eq!(record.cycle, CYCLE_ERROR);
+        assert_eq!(record.theta_mrad, 0);
+        assert_eq!(record.theta_dot_mrad_s, 0);
+        assert_eq!(record.phi_mrad, 0);
+        assert_eq!(record.phi_dot_mrad_s, 0);
     }
 }
