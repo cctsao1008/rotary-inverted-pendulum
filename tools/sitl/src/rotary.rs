@@ -26,8 +26,8 @@ use rip_runtime_state::{
 };
 use rip_state_estimator::EstimatorConfig;
 use rip_state_feedback::{
-    LqrController, QNET_POLE_PLACEMENT_C1_TORQUE_GAINS,
-    QNET_POLE_PLACEMENT_C2_TORQUE_GAINS, QNET_REFERENCE_TORQUE_GAINS,
+    LqrController, QNET_POLE_PLACEMENT_C1_TORQUE_GAINS, QNET_POLE_PLACEMENT_C2_TORQUE_GAINS,
+    QNET_REFERENCE_TORQUE_GAINS,
 };
 use rip_tb6612_actuation::{
     Tb6612BridgeMode, Tb6612ElectricalActuation, Tb6612FrameIo, Tb6612Mapper, Tb6612Output,
@@ -67,11 +67,7 @@ pub enum BalanceControllerProfile {
 }
 
 impl BalanceControllerProfile {
-    pub const ALL: [Self; 3] = [
-        Self::QnetLqr,
-        Self::PolePlacementC1,
-        Self::PolePlacementC2,
-    ];
+    pub const ALL: [Self; 3] = [Self::QnetLqr, Self::PolePlacementC1, Self::PolePlacementC2];
 
     pub const fn as_str(self) -> &'static str {
         match self {
