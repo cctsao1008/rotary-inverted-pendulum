@@ -1,6 +1,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+use rip_actuator_model::{ArmActuatorModel, BoundedActuatorCommand};
 use rip_robot_domain::{NormalizedCommand, TimestampUs};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +98,12 @@ impl CommandSafetyOutcome {
     pub const fn constrained(self) -> bool {
         !self.reasons.is_empty()
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SafeMappedCommand {
+    pub bounded_command: BoundedActuatorCommand,
+    pub safety: CommandSafetyOutcome,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -198,11 +205,38 @@ impl CommandSafetyGate {
             reasons,
         })
     }
+
+    /// Apply output-safety constraints to an already mapped actuator command.
+    ///
+    /// The actuator-model saturation flag is preserved because it describes
+    /// model authority, while `safety` separately records magnitude/slew
+    /// constraints. Predicted torque is recomputed from the command that can
+    /// actually continue toward runtime authority.
+    pub fn constrain_mapped_command(
+        &mut self,
+        actuator_model: ArmActuatorModel,
+        mapped: BoundedActuatorCommand,
+        timestamp: TimestampUs,
+    ) -> Result<SafeMappedCommand, CommandSafetyError> {
+        let safety = self.constrain(mapped.command, timestamp)?;
+        let bounded_command = BoundedActuatorCommand {
+            command: safety.command,
+            saturated: mapped.saturated,
+            predicted_arm_torque: actuator_model.predicted_torque_for_command(safety.command),
+        };
+
+        Ok(SafeMappedCommand {
+            bounded_command,
+            safety,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rip_actuator_model::ArmActuatorParameters;
+    use rip_robot_domain::{GeneralizedDemand, TorqueNm};
 
     fn command(value: f32) -> NormalizedCommand {
         NormalizedCommand::new(value).unwrap()
@@ -213,6 +247,10 @@ mod tests {
             SafetyProfileKind::Simulation,
             CommandSafetyLimits::new(max_abs_command, max_slew_per_s).unwrap(),
         )
+    }
+
+    fn actuator_model() -> ArmActuatorModel {
+        ArmActuatorModel::new(ArmActuatorParameters::new(0.2, 0.1).unwrap()).unwrap()
     }
 
     #[test]
@@ -327,5 +365,60 @@ mod tests {
 
         let outcome = gate.constrain(command(0.0), TimestampUs(0)).unwrap();
         assert_eq!(outcome.profile, SafetyProfileKind::Commissioning);
+    }
+
+    #[test]
+    fn mapped_command_recomputes_torque_after_magnitude_constraint() {
+        let model = actuator_model();
+        let mapped = model
+            .command_for_demand(GeneralizedDemand {
+                arm_torque: TorqueNm(0.2),
+            })
+            .unwrap();
+        let mut gate = CommandSafetyGate::new();
+        gate.configure(profile(0.55, 10.0));
+
+        let first = gate
+            .constrain_mapped_command(model, mapped, TimestampUs(0))
+            .unwrap();
+        assert_eq!(first.bounded_command.command, NormalizedCommand::ZERO);
+        assert_eq!(first.bounded_command.predicted_arm_torque, TorqueNm(0.0));
+
+        let limited = gate
+            .constrain_mapped_command(model, mapped, TimestampUs(1_000_000))
+            .unwrap();
+        assert_eq!(limited.bounded_command.command, command(0.55));
+        assert!((limited.bounded_command.predicted_arm_torque.0 - 0.1).abs() < 1.0e-6);
+        assert!(limited
+            .safety
+            .reasons
+            .contains(CommandConstraintReasons::MAGNITUDE));
+        assert!(!limited.bounded_command.saturated);
+    }
+
+    #[test]
+    fn mapped_command_preserves_actuator_model_saturation_evidence() {
+        let model = actuator_model();
+        let mapped = model
+            .command_for_demand(GeneralizedDemand {
+                arm_torque: TorqueNm(1.0),
+            })
+            .unwrap();
+        assert!(mapped.saturated);
+
+        let mut gate = CommandSafetyGate::new();
+        gate.configure(profile(1.0, 10.0));
+        gate.constrain_mapped_command(model, mapped, TimestampUs(0))
+            .unwrap();
+        let safe = gate
+            .constrain_mapped_command(model, mapped, TimestampUs(1_000_000))
+            .unwrap();
+
+        assert!(safe.bounded_command.saturated);
+        assert_eq!(safe.bounded_command.command, mapped.command);
+        assert_eq!(
+            safe.bounded_command.predicted_arm_torque,
+            mapped.predicted_arm_torque
+        );
     }
 }
