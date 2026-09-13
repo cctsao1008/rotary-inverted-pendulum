@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/rotary.png" width="420" alt="Rotary inverted pendulum mascot">
+  <img src="docs/assets/rotary-mascot.svg" width="240" alt="Rotary mascot">
 </p>
 
 <h1 align="center">Rotary</h1>
