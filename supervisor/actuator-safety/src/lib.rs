@@ -265,12 +265,8 @@ mod tests {
         gate.configure(profile(1.0, 0.5));
         gate.constrain(command(1.0), TimestampUs(0)).unwrap();
 
-        let first = gate
-            .constrain(command(1.0), TimestampUs(200_000))
-            .unwrap();
-        let second = gate
-            .constrain(command(1.0), TimestampUs(400_000))
-            .unwrap();
+        let first = gate.constrain(command(1.0), TimestampUs(200_000)).unwrap();
+        let second = gate.constrain(command(1.0), TimestampUs(400_000)).unwrap();
 
         assert!((first.command.get() - 0.1).abs() < 1.0e-6);
         assert!((second.command.get() - 0.2).abs() < 1.0e-6);
@@ -285,13 +281,9 @@ mod tests {
         gate.constrain(command(1.0), TimestampUs(0)).unwrap();
         gate.constrain(command(1.0), TimestampUs(400_000)).unwrap();
 
-        let reversed = gate
-            .constrain(command(-1.0), TimestampUs(600_000))
-            .unwrap();
+        let reversed = gate.constrain(command(-1.0), TimestampUs(600_000)).unwrap();
         assert!((reversed.command.get() - 0.1).abs() < 1.0e-6);
-        assert!(reversed
-            .reasons
-            .contains(CommandConstraintReasons::SLEW));
+        assert!(reversed.reasons.contains(CommandConstraintReasons::SLEW));
     }
 
     #[test]
@@ -299,19 +291,13 @@ mod tests {
         let mut gate = CommandSafetyGate::new();
         gate.configure(profile(1.0, 10.0));
         gate.constrain(command(0.5), TimestampUs(0)).unwrap();
-        let moving = gate
-            .constrain(command(0.5), TimestampUs(100_000))
-            .unwrap();
+        let moving = gate.constrain(command(0.5), TimestampUs(100_000)).unwrap();
         assert_eq!(moving.command, command(0.5));
 
         gate.reset_history();
-        let restarted = gate
-            .constrain(command(0.5), TimestampUs(200_000))
-            .unwrap();
+        let restarted = gate.constrain(command(0.5), TimestampUs(200_000)).unwrap();
         assert_eq!(restarted.command, NormalizedCommand::ZERO);
-        assert!(restarted
-            .reasons
-            .contains(CommandConstraintReasons::SLEW));
+        assert!(restarted.reasons.contains(CommandConstraintReasons::SLEW));
     }
 
     #[test]
@@ -326,9 +312,7 @@ mod tests {
             Err(CommandSafetyError::NonMonotonicTimestamp)
         );
 
-        let next = gate
-            .constrain(command(0.5), TimestampUs(300_000))
-            .unwrap();
+        let next = gate.constrain(command(0.5), TimestampUs(300_000)).unwrap();
         assert!((next.command.get() - 0.2).abs() < 1.0e-6);
     }
 
