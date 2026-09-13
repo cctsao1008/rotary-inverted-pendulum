@@ -25,6 +25,7 @@ EXPLICIT_SEMANTIC_ENV = {
     "OMNISIM_NEWTON_INERTIA_COM": "1",
     "OMNISIM_NEWTON_SPAWN_AT_POSITION": "1",
 }
+SIGN_ZERO_TOLERANCE = 1e-15
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -133,6 +134,47 @@ def check_probe_result(result: dict[str, Any], manifest: dict[str, Any]) -> None
     finite_float(acceleration.get("phi_ddot_rad_s2"), "phi_ddot")
 
 
+def evaluate_causality(result: dict[str, Any]) -> dict[str, Any]:
+    """Apply only the coordinate/sign predictions that the probe state licenses."""
+    theta0, theta_dot0, phi0, phi_dot0 = [float(value) for value in result["initial_state"]]
+    tau = float(result["arm_torque_nm"])
+    acceleration = result["first_step_acceleration_estimate"]
+    theta_ddot = float(acceleration["theta_ddot_rad_s2"])
+    phi_ddot = float(acceleration["phi_ddot_rad_s2"])
+
+    zero_rates = abs(theta_dot0) <= SIGN_ZERO_TOLERANCE and abs(phi_dot0) <= SIGN_ZERO_TOLERANCE
+    checks: list[dict[str, Any]] = []
+    if zero_rates and abs(theta0) <= SIGN_ZERO_TOLERANCE and abs(phi0) <= SIGN_ZERO_TOLERANCE and abs(tau) > SIGN_ZERO_TOLERANCE:
+        checks.extend(
+            [
+                {
+                    "claim": "arm acceleration follows applied arm-torque sign",
+                    "passed": phi_ddot * tau > 0.0,
+                    "observed": {"phi_ddot_rad_s2": phi_ddot, "arm_torque_nm": tau},
+                },
+                {
+                    "claim": "upright pendulum acceleration opposes applied arm-torque sign",
+                    "passed": theta_ddot * tau < 0.0,
+                    "observed": {"theta_ddot_rad_s2": theta_ddot, "arm_torque_nm": tau},
+                },
+            ]
+        )
+    elif zero_rates and abs(phi0) <= SIGN_ZERO_TOLERANCE and abs(tau) <= SIGN_ZERO_TOLERANCE and abs(theta0) > SIGN_ZERO_TOLERANCE:
+        checks.append(
+            {
+                "claim": "unforced upright equilibrium is unstable in theta",
+                "passed": theta_ddot * theta0 > 0.0,
+                "observed": {"theta0_rad": theta0, "theta_ddot_rad_s2": theta_ddot},
+            }
+        )
+
+    return {
+        "applicable": bool(checks),
+        "passed": bool(checks) and all(bool(item["passed"]) for item in checks),
+        "checks": checks,
+    }
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     fixture = args.fixture_dir.resolve()
     manifest_path = fixture / "manifest.json"
@@ -206,6 +248,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     sidecar = load_json(sidecar_path)
     check_probe_result(result, manifest)
     check_sidecar(sidecar)
+    causality = evaluate_causality(result)
+    if causality["applicable"] and not causality["passed"]:
+        raise RuntimeError(f"OmniSim probe violated project causality contract: {causality}")
 
     evidence = {
         "schema": 1,
@@ -216,6 +261,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "semantic_environment": EXPLICIT_SEMANTIC_ENV,
         "backend_verdict": sidecar,
         "probe_result": result,
+        "causality": causality,
         "execution": {
             "doctor_command": doctor_cmd,
             "run_command": run_cmd,
@@ -253,6 +299,7 @@ def main() -> int:
                 "evidence": str((args.evidence_dir.resolve() / "evidence.json")),
                 "theta_ddot_rad_s2": accel["theta_ddot_rad_s2"],
                 "phi_ddot_rad_s2": accel["phi_ddot_rad_s2"],
+                "causality": evidence["causality"],
             },
             sort_keys=True,
         )
