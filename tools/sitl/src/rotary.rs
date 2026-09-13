@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use rip_actuation_interface::ActuationSink;
 use rip_actuator_model::{ArmActuatorModel, ArmActuatorParameters};
+use rip_actuator_safety::{CommandSafetyLimits, CommandSafetyProfile, SafetyProfileKind};
 use rip_control_runtime::{
     ControlCycle, ControlRuntime, RuntimeObservation, RuntimeObservationSource,
 };
@@ -57,6 +58,8 @@ const BALANCE_EXIT_RATE_RAD_S: f32 = 2.0;
 const CAPTURE_EXIT_ANGLE_RAD: f32 = 30.0 * PI / 180.0;
 const CAPTURE_EXIT_RATE_RAD_S: f32 = 4.0;
 const CAPTURE_SETTLE_CYCLES: u16 = 20;
+
+const SIMULATION_MAX_ABS_COMMAND: f32 = 1.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BalanceControllerProfile {
@@ -294,6 +297,9 @@ impl RotarySitlSystem {
                 "rotary full semantic-path SITL requires one runtime opportunity per fresh observation",
             ));
         }
+        if runtime_period_us == 0 {
+            return Err(boxed("rotary SITL runtime period must be non-zero"));
+        }
 
         let p = &parameters.plant;
         let furuta_parameters = FurutaParameters {
@@ -356,6 +362,19 @@ impl RotarySitlSystem {
             controller,
             actuator_model,
         );
+        let runtime_period_s = runtime_period_us as f32 * 1.0e-6;
+        let simulation_max_slew_per_s = 2.0 / runtime_period_s;
+        let simulation_safety_limits = CommandSafetyLimits::new(
+            SIMULATION_MAX_ABS_COMMAND,
+            simulation_max_slew_per_s,
+        )
+        .ok_or_else(|| boxed("invalid SITL simulation output-safety limits"))?;
+        runtime
+            .configure_command_safety(CommandSafetyProfile::new(
+                SafetyProfileKind::Simulation,
+                simulation_safety_limits,
+            ))
+            .map_err(|error| boxed(format!("runtime output-safety configuration: {error:?}")))?;
         runtime.configure_admission_limits(
             AdmissionLimits::new(CAPTURE_ENTER_ANGLE_RAD)
                 .ok_or_else(|| boxed("invalid SITL closed-loop admission limits"))?,
