@@ -364,11 +364,9 @@ impl RotarySitlSystem {
         );
         let runtime_period_s = runtime_period_us as f32 * 1.0e-6;
         let simulation_max_slew_per_s = 2.0 / runtime_period_s;
-        let simulation_safety_limits = CommandSafetyLimits::new(
-            SIMULATION_MAX_ABS_COMMAND,
-            simulation_max_slew_per_s,
-        )
-        .ok_or_else(|| boxed("invalid SITL simulation output-safety limits"))?;
+        let simulation_safety_limits =
+            CommandSafetyLimits::new(SIMULATION_MAX_ABS_COMMAND, simulation_max_slew_per_s)
+                .ok_or_else(|| boxed("invalid SITL simulation output-safety limits"))?;
         runtime
             .configure_command_safety(CommandSafetyProfile::new(
                 SafetyProfileKind::Simulation,
