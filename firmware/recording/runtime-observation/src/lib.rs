@@ -192,7 +192,6 @@ const fn watchdog_code(health: WatchdogHealth) -> u32 {
         WatchdogHealth::Disarmed => 0,
         WatchdogHealth::Healthy => 1,
         WatchdogHealth::Expired => 2,
-        _ => 0,
     }
 }
 
