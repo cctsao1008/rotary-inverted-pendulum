@@ -151,6 +151,7 @@ jobs:
           python -m py_compile \
             tools/model/rigid_body/build_furuta_urdf.py \
             tools/model/rigid_body/build_omnisim_probe.py \
+            tools/model/rigid_body/run_omnisim_probe.py \
             tools/model/rigid_body/omnisim/controllers/furuta_probe/furuta_probe.py \
             tools/model/rigid_body/pybullet_furuta.py \
             tools/model/rigid_body/full3d_furuta.py \
