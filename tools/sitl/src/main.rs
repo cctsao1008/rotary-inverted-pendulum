@@ -4,8 +4,8 @@ use std::io;
 use std::path::PathBuf;
 
 use rip_sitl::{
-    execute, execute_with_system, write_artifacts, ReferenceAssemblyParameters, RotarySitlSystem,
-    RunContext, Scenario,
+    execute, execute_with_system, rotary::BalanceControllerProfile, write_artifacts,
+    ReferenceAssemblyParameters, RotarySitlSystem, RunContext, Scenario,
 };
 
 const DEFAULT_SYSTEM_IDENTIFIER: &str = "rotary-inverted-pendulum";
@@ -18,6 +18,7 @@ struct Cli {
     parameters: PathBuf,
     system_identifier: String,
     git_commit: String,
+    balance_controller: BalanceControllerProfile,
 }
 
 fn main() {
@@ -35,15 +36,24 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let (context, artifacts, mode) = if let Some(rotary) = scenario.rotary {
         let parameters = ReferenceAssemblyParameters::load(&cli.parameters)?;
+        let mut production_model_configuration = parameters.production_model_configuration();
+        production_model_configuration
+            .as_object_mut()
+            .ok_or_else(|| io::Error::other("production model configuration must be an object"))?
+            .insert(
+                "balance_controller_profile".to_string(),
+                cli.balance_controller.as_str().into(),
+            );
         let context = base_context.with_model_configurations(
-            parameters.production_model_configuration(),
+            production_model_configuration,
             parameters.virtual_physical_truth_configuration(),
         );
-        let mut system = RotarySitlSystem::new(
+        let mut system = RotarySitlSystem::new_with_balance_profile(
             &parameters,
             rotary,
             scenario.sensor_period_us,
             scenario.runtime_period_us,
+            cli.balance_controller,
         )?;
         let artifacts = execute_with_system(&context, &scenario, &mut system)?;
         (context, artifacts, "rotary-full-semantic-path")
@@ -60,6 +70,12 @@ fn run() -> Result<(), Box<dyn Error>> {
     println!("duration_us............ {}", scenario.duration_us);
     println!("system................. {}", context.system_identifier);
     println!("git_commit............. {}", context.git_commit);
+    if scenario.rotary.is_some() {
+        println!(
+            "balance_controller..... {}",
+            cli.balance_controller.as_str()
+        );
+    }
     println!("output................. {}", cli.output.display());
     Ok(())
 }
@@ -71,6 +87,7 @@ fn parse_cli() -> Result<Cli, String> {
     let mut parameters = None;
     let mut system_identifier = None;
     let mut git_commit = None;
+    let mut balance_controller = None;
 
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -104,10 +121,17 @@ fn parse_cli() -> Result<Cli, String> {
                         .ok_or_else(|| "--git-commit requires a value".to_string())?,
                 );
             }
+            "--balance-controller" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--balance-controller requires a value".to_string())?;
+                balance_controller = Some(BalanceControllerProfile::parse(&value)?);
+            }
             "--help" | "-h" => {
                 println!(
                     "usage: rip-sitl --scenario <scenario.toml> --output <directory> \
                      [--parameters <reference-assembly.json>] \
+                     [--balance-controller <qnet_lqr|pole_placement_c1|pole_placement_c2>] \
                      [--system-identifier <id>] [--git-commit <sha>]"
                 );
                 std::process::exit(0);
@@ -125,5 +149,6 @@ fn parse_cli() -> Result<Cli, String> {
         git_commit: git_commit
             .or_else(|| env::var("GITHUB_SHA").ok())
             .unwrap_or_else(|| "unknown".to_string()),
+        balance_controller: balance_controller.unwrap_or_default(),
     })
 }
