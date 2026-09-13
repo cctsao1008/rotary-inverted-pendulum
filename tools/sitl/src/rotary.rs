@@ -25,7 +25,10 @@ use rip_runtime_state::{
     SensorTimingLimits, SensorTimingMonitor,
 };
 use rip_state_estimator::EstimatorConfig;
-use rip_state_feedback::{LqrController, QNET_REFERENCE_TORQUE_GAINS};
+use rip_state_feedback::{
+    LqrController, QNET_POLE_PLACEMENT_C1_TORQUE_GAINS,
+    QNET_POLE_PLACEMENT_C2_TORQUE_GAINS, QNET_REFERENCE_TORQUE_GAINS,
+};
 use rip_tb6612_actuation::{
     Tb6612BridgeMode, Tb6612ElectricalActuation, Tb6612FrameIo, Tb6612Mapper, Tb6612Output,
 };
@@ -54,6 +57,49 @@ const BALANCE_EXIT_RATE_RAD_S: f32 = 2.0;
 const CAPTURE_EXIT_ANGLE_RAD: f32 = 30.0 * PI / 180.0;
 const CAPTURE_EXIT_RATE_RAD_S: f32 = 4.0;
 const CAPTURE_SETTLE_CYCLES: u16 = 20;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BalanceControllerProfile {
+    #[default]
+    QnetLqr,
+    PolePlacementC1,
+    PolePlacementC2,
+}
+
+impl BalanceControllerProfile {
+    pub const ALL: [Self; 3] = [
+        Self::QnetLqr,
+        Self::PolePlacementC1,
+        Self::PolePlacementC2,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::QnetLqr => "qnet_lqr",
+            Self::PolePlacementC1 => "pole_placement_c1",
+            Self::PolePlacementC2 => "pole_placement_c2",
+        }
+    }
+
+    pub const fn gains(self) -> [f32; 4] {
+        match self {
+            Self::QnetLqr => QNET_REFERENCE_TORQUE_GAINS,
+            Self::PolePlacementC1 => QNET_POLE_PLACEMENT_C1_TORQUE_GAINS,
+            Self::PolePlacementC2 => QNET_POLE_PLACEMENT_C2_TORQUE_GAINS,
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "qnet_lqr" => Ok(Self::QnetLqr),
+            "pole_placement_c1" => Ok(Self::PolePlacementC1),
+            "pole_placement_c2" => Ok(Self::PolePlacementC2),
+            _ => Err(format!(
+                "unsupported balance controller {value:?}; expected qnet_lqr, pole_placement_c1, or pole_placement_c2"
+            )),
+        }
+    }
+}
 
 struct PendingObservationSource {
     pending: Option<RuntimeObservation>,
@@ -220,6 +266,7 @@ pub struct RotarySitlSystem {
     pending_authorized: Option<AuthorizedActuation>,
     sample_index: u32,
     last_regime: ControlRegime,
+    balance_controller_profile: BalanceControllerProfile,
     metrics: RotaryMetrics,
 }
 
@@ -229,6 +276,22 @@ impl RotarySitlSystem {
         scenario: RotaryScenario,
         sensor_period_us: u64,
         runtime_period_us: u64,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::new_with_balance_profile(
+            parameters,
+            scenario,
+            sensor_period_us,
+            runtime_period_us,
+            BalanceControllerProfile::QnetLqr,
+        )
+    }
+
+    pub fn new_with_balance_profile(
+        parameters: &ReferenceAssemblyParameters,
+        scenario: RotaryScenario,
+        sensor_period_us: u64,
+        runtime_period_us: u64,
+        balance_controller_profile: BalanceControllerProfile,
     ) -> Result<Self, Box<dyn Error>> {
         if sensor_period_us != runtime_period_us {
             return Err(boxed(
@@ -272,7 +335,7 @@ impl RotarySitlSystem {
             .map_err(|error| boxed(format!("encoder calibration: {error:?}")))?,
         );
 
-        let controller = hybrid_controller(furuta_parameters)?;
+        let controller = hybrid_controller(furuta_parameters, balance_controller_profile)?;
         let last_regime = controller.regime();
         let a = &parameters.production_actuator_model;
         let actuator_model = ArmActuatorModel::new(
@@ -356,6 +419,7 @@ impl RotarySitlSystem {
             pending_authorized: None,
             sample_index: 0,
             last_regime,
+            balance_controller_profile,
             metrics: RotaryMetrics::default(),
         })
     }
@@ -593,6 +657,7 @@ impl SitlSystem for RotarySitlSystem {
         let final_state = self.plant.state();
         let actuator = *self.actuator_state.borrow();
         json!({
+            "balance_controller_profile": self.balance_controller_profile.as_str(),
             "computed_cycles": self.metrics.computed_cycles,
             "authorized_cycles": self.metrics.authorized_cycles,
             "denied_cycles": self.metrics.denied_cycles,
@@ -613,9 +678,12 @@ impl SitlSystem for RotarySitlSystem {
     }
 }
 
-fn hybrid_controller(parameters: FurutaParameters) -> Result<HybridController, Box<dyn Error>> {
-    let balance = LqrController::new(QNET_REFERENCE_TORQUE_GAINS)
-        .map_err(|error| boxed(format!("LQR setup: {error:?}")))?;
+fn hybrid_controller(
+    parameters: FurutaParameters,
+    balance_controller_profile: BalanceControllerProfile,
+) -> Result<HybridController, Box<dyn Error>> {
+    let balance = LqrController::new(balance_controller_profile.gains())
+        .map_err(|error| boxed(format!("balance controller setup: {error:?}")))?;
     let swing = EnergySwingUpController::new(EnergySwingUpConfig {
         pendulum_mass_kg: parameters.pendulum_mass_kg,
         pendulum_com_length_m: parameters.pendulum_com_length_m,
@@ -726,7 +794,44 @@ mod tests {
     }
 
     #[test]
-    fn full_semantic_path_reaches_production_tb6612_frame() {
+    fn every_balance_profile_reaches_the_same_production_semantic_path() {
+        let parameters = parameters();
+        let scenario = balance_scenario();
+
+        for profile in BalanceControllerProfile::ALL {
+            let mut system = RotarySitlSystem::new_with_balance_profile(
+                &parameters,
+                scenario.rotary.unwrap(),
+                scenario.sensor_period_us,
+                scenario.runtime_period_us,
+                profile,
+            )
+            .unwrap();
+            let context = RunContext::scheduler_only("rotary-inverted-pendulum", "test")
+                .with_model_configurations(
+                    parameters.production_model_configuration(),
+                    parameters.virtual_physical_truth_configuration(),
+                );
+
+            let artifacts = execute_with_system(&context, &scenario, &mut system).unwrap();
+            let summary: Value = serde_json::from_str(&artifacts.summary_json).unwrap();
+
+            assert_eq!(summary["pass"], true);
+            assert_eq!(
+                summary["system"]["balance_controller_profile"],
+                profile.as_str()
+            );
+            assert!(summary["system"]["computed_cycles"].as_u64().unwrap() > 0);
+            assert!(summary["system"]["authorized_cycles"].as_u64().unwrap() > 0);
+            assert!(artifacts.trace_jsonl.contains("tb6612_frame"));
+            assert!(artifacts
+                .trace_jsonl
+                .contains("authorized_actuation_present"));
+        }
+    }
+
+    #[test]
+    fn default_balance_profile_is_qnet_lqr() {
         let parameters = parameters();
         let scenario = balance_scenario();
         let mut system = RotarySitlSystem::new(
@@ -741,17 +846,13 @@ mod tests {
                 parameters.production_model_configuration(),
                 parameters.virtual_physical_truth_configuration(),
             );
-
         let artifacts = execute_with_system(&context, &scenario, &mut system).unwrap();
         let summary: Value = serde_json::from_str(&artifacts.summary_json).unwrap();
 
-        assert_eq!(summary["pass"], true);
-        assert!(summary["system"]["computed_cycles"].as_u64().unwrap() > 0);
-        assert!(summary["system"]["authorized_cycles"].as_u64().unwrap() > 0);
-        assert!(artifacts.trace_jsonl.contains("tb6612_frame"));
-        assert!(artifacts
-            .trace_jsonl
-            .contains("authorized_actuation_present"));
+        assert_eq!(
+            summary["system"]["balance_controller_profile"],
+            BalanceControllerProfile::QnetLqr.as_str()
+        );
     }
 
     #[test]
