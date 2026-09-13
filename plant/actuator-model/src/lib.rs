@@ -53,6 +53,19 @@ impl ArmActuatorModel {
         self.parameters
     }
 
+    /// Forward-map a normalized command through the same deadzone semantics used
+    /// by the inverse actuator model.
+    ///
+    /// This is used when a downstream safety layer further constrains an
+    /// already-mapped command and the predicted torque must remain truthful for
+    /// the command that can actually reach authority.
+    pub fn predicted_torque_for_command(self, command: NormalizedCommand) -> TorqueNm {
+        TorqueNm(
+            effective_command(command.get(), self.parameters.command_deadzone)
+                * self.parameters.torque_per_effective_command_nm,
+        )
+    }
+
     pub fn command_for_demand(
         self,
         demand: GeneralizedDemand,
@@ -71,10 +84,7 @@ impl ArmActuatorModel {
         let raw_command =
             inverse_effective_command(bounded_effective, self.parameters.command_deadzone);
         let command = NormalizedCommand::new(raw_command).expect("bounded inverse command");
-        let predicted_arm_torque = TorqueNm(
-            effective_command(command.get(), self.parameters.command_deadzone)
-                * self.parameters.torque_per_effective_command_nm,
-        );
+        let predicted_arm_torque = self.predicted_torque_for_command(command);
 
         Ok(BoundedActuatorCommand {
             command,
@@ -251,6 +261,15 @@ mod tests {
 
         assert!(!command.saturated);
         assert!((command.predicted_arm_torque.0 - 0.08).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn forward_model_preserves_deadzone_semantics() {
+        let inside_deadzone = NormalizedCommand::new(0.05).unwrap();
+        let half_effective = NormalizedCommand::new(0.55).unwrap();
+
+        assert_eq!(model().predicted_torque_for_command(inside_deadzone), TorqueNm(0.0));
+        assert!((model().predicted_torque_for_command(half_effective).0 - 0.1).abs() < 1.0e-6);
     }
 
     #[test]
