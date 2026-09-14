@@ -5,8 +5,14 @@ Host-side tools live under this directory and do not define an additional archit
 ```text
 model/
 sitl/
+telemetry/
+visualization/
 ```
 
 `tools/model` owns independent host-side model analysis and correlation. Its Python/NumPy-SciPy Furuta reference does not import or execute the production Rust dynamics implementation; both sides consume an explicit correlation fixture so equation, sign, and integration drift can be detected without claiming specimen calibration.
 
 `tools/sitl` owns deterministic virtual time, scenario execution, virtual physical truth, machine-readable evidence, and CI-facing Software-In-The-Loop execution. Production estimator, controller, actuator-model, runtime-authority, and Firmware actuator semantics are reused from their owning domain crates rather than duplicated here.
+
+`tools/telemetry` owns host-side decoding/inspection of recorded production evidence.
+
+`tools/visualization` owns read-only presentation of machine-readable simulation, model, telemetry, and evidence outputs. Visualization may explain evidence but does not produce dynamics, control decisions, model authority, specimen calibration, or physical actuation authority.
