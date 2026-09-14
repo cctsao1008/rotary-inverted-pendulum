@@ -2,7 +2,7 @@
 
 A lightweight local viewer for Rotary simulation and evidence.
 
-The console is deliberately **read-only with respect to physics and authority**. It consumes normalized trace/evidence JSON produced by the existing Rust/Python/SciPy/rigid-body tooling. It does not reimplement Furuta dynamics, control laws, model-validity decisions, or physical authority logic in JavaScript.
+The console is deliberately **read-only with respect to physics and authority**. It consumes normalized trace/evidence data produced by the existing Rust/Python/SciPy/rigid-body tooling. It does not reimplement Furuta dynamics, control laws, model-validity decisions, or physical authority logic in JavaScript.
 
 > The UI may explain evidence. It may not upgrade evidence.
 
@@ -22,36 +22,50 @@ Then open:
 http://localhost:8000/tools/visualization/rotary-sim-viewer/
 ```
 
-### Continuous SITL mode
+### Persistent live SITL mode
 
-For continuous console animation backed by fresh `rip-sitl` runs, use the local live server instead of `http.server`:
+For a continuously advancing SITL plant, use the local live server instead of `http.server`:
 
 ```bash
 python tools/visualization/rotary-sim-viewer/serve_live.py
 ```
 
-Then open the same URL:
+Then open:
 
 ```text
 http://127.0.0.1:8000/tools/visualization/rotary-sim-viewer/
 ```
 
-Use the **Balance** or **Swing-up** selector and press **Live**. The server repeatedly launches the existing Rust `rip-sitl` scenario, normalizes the resulting authoritative SITL JSONL with `adapt_sitl_trace.py`, and streams display frames to the browser over Server-Sent Events (SSE). **Stop** closes the browser stream.
+Use the **Balance** or **Swing-up** selector and press **Live**. The Python bridge launches `rip-sitl-live`, a persistent Rust SITL process that keeps one `RotarySitlSystem` alive and advances virtual time monotonically until the browser presses **Stop** or disconnects.
 
-The current live transport is deliberately run-backed rather than a second interactive physics engine: each cycle is a fresh deterministic SITL run, then its evidence is streamed at the selected wall-clock speed. This provides continuous visualization without moving dynamics or controller logic into JavaScript. A future incremental SITL observer can replace the run-backed transport without changing the viewer schema.
+The live path is:
 
-The live server limits browser display transport to 60 fps by default. This is display projection only; the original SITL evidence remains at its native sample/event rate.
+```text
+persistent RotarySitlSystem
+    -> advance physical time
+    -> SensorSample
+    -> ObservationDelivery
+    -> ProductionRuntime
+    -> ActuationCommit
+    -> timestamped sample
+    -> local SSE display projection
+    -> browser
+```
 
-The first MVP uses Three.js from a CDN, so the browser needs network access for that library. The evidence/trace files themselves remain local.
+There is no finite 5 s run boundary and no repeated scenario reset. The `duration_us` value in the selected scenario remains part of the normal finite evidence-run contract, but `rip-sitl-live` uses the same scenario only for initial state and cadence. Live virtual time continues until stopped.
 
-## MVP
+The server limits browser transport to 60 fps by default while the Rust semantic path continues at the scenario's native runtime cadence (currently 1 kHz). This is display downsampling only; it does not alter plant, estimator, controller, supervisor, or actuator state.
 
-The console provides:
+The browser retains only a bounded rolling live history so an indefinitely running console does not grow memory without bound.
+
+The first MVP uses Three.js from a CDN, so the browser needs network access for that library. Evidence and live simulation remain local.
+
+## Console capabilities
 
 - configurator-style navigation and status layout;
 - a 3-D Furuta scene with the project DOF topology;
 - replay controls for a normalized JSON trace;
-- continuous run-backed SITL visualization for Balance and Swing-up;
+- persistent incremental SITL visualization for Balance and Swing-up;
 - live display of `[theta, theta_dot, phi, phi_dot]`;
 - requested/applied torque, runtime-state, and authority fields where present;
 - model/backend/evidence metadata;
@@ -62,7 +76,7 @@ The demo trace is **not dynamics evidence**. It exists only to exercise renderin
 
 ## SITL adapter
 
-`adapt_sitl_trace.py` projects existing SITL JSONL evidence into the viewer schema. It does not integrate dynamics, run a controller, alter the source trace, or create a new authority claim.
+`adapt_sitl_trace.py` projects existing finite SITL JSONL evidence into the viewer schema. It does not integrate dynamics, run a controller, alter the source trace, or create a new authority claim.
 
 Self-test the adapter:
 
@@ -70,7 +84,7 @@ Self-test the adapter:
 python tools/visualization/rotary-sim-viewer/adapt_sitl_trace.py --self-test
 ```
 
-Run a real Rotary SITL scenario first, for example:
+Run a finite Rotary SITL scenario, for example:
 
 ```bash
 cargo run --manifest-path tools/sitl/Cargo.toml --bin rip-sitl -- \
@@ -89,16 +103,7 @@ python tools/visualization/rotary-sim-viewer/adapt_sitl_trace.py \
 
 Then use **Load trace** in the console and select `target/viewer/rotary-sitl.json`.
 
-The adapter groups records by SITL virtual time and preserves the canonical truth state. Where present it also carries forward:
-
-- control regime;
-- requested arm torque;
-- applied virtual arm torque;
-- runtime state;
-- authority decision;
-- estimated state.
-
-The viewer's primary `arm_torque_nm` field is the applied virtual torque when available. Requested and applied values remain separate fields.
+The adapter groups records by SITL virtual time and preserves the canonical truth state. Where present it also carries forward control regime, requested/applied arm torque, runtime state, authority decision, and estimated state.
 
 ## Normalized viewer trace
 
@@ -149,7 +154,7 @@ project +y -> viewer -Z
 project +z -> viewer +Y
 ```
 
-Under that right-handed mapping, positive project `theta` is rendered as rotation about viewer `-X`. The hinge/axle mesh is aligned to viewer X as well, so the visible mechanism and the replay transform encode the same DOF.
+Under that right-handed mapping, positive project `theta` is rendered as rotation about viewer `-X`. The hinge/axle mesh is aligned to viewer X as well, so the visible mechanism and replay transform encode the same DOF.
 
 The viewer must never reinterpret these axes simply to make an animation look nicer.
 
