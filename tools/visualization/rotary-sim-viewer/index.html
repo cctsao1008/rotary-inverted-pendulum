@@ -26,6 +26,7 @@
       <div class="top-status">
         <div class="status-chip"><span class="dot dot-ok"></span><span id="model-chip">model: demo</span></div>
         <div class="status-chip"><span id="backend-chip">backend: viewer</span></div>
+        <div class="status-chip" id="live-chip">LIVE: disconnected</div>
         <div class="status-chip status-danger">SIMULATION ONLY</div>
       </div>
     </header>
@@ -49,7 +50,21 @@
               <div class="section-title">Furuta Plant</div>
               <div class="section-subtitle">Canonical DOF: φ base yaw · θ pendulum hinge</div>
             </div>
-            <label class="file-button">Load trace<input id="trace-file" type="file" accept="application/json"></label>
+            <div class="live-controls">
+              <select id="live-scenario" title="SITL scenario">
+                <option value="balance">Balance</option>
+                <option value="swingup">Swing-up</option>
+              </select>
+              <select id="live-speed" title="Playback speed">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="2">2×</option>
+                <option value="5">5×</option>
+              </select>
+              <button id="live-start" class="live-button">▶ Live</button>
+              <button id="live-stop" class="live-button" disabled>■ Stop</button>
+              <label class="file-button">Load trace<input id="trace-file" type="file" accept="application/json"></label>
+            </div>
           </div>
           <div id="scene"></div>
           <div class="transport">
@@ -74,6 +89,14 @@
           <div class="card-title">Control</div>
           <div class="kv"><span>Regime</span><strong id="regime">—</strong></div>
           <div class="kv"><span>Arm torque</span><strong id="torque">0.0000 Nm</strong></div>
+          <div class="kv"><span>Requested</span><strong id="requested-torque">—</strong></div>
+          <div class="kv"><span>Applied</span><strong id="applied-torque">—</strong></div>
+        </section>
+
+        <section class="info-card">
+          <div class="card-title">Supervisor</div>
+          <div class="kv"><span>Runtime state</span><strong id="runtime-state">—</strong></div>
+          <div class="kv"><span>Authority</span><strong id="authority">—</strong></div>
         </section>
 
         <section class="info-card">
