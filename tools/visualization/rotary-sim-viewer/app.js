@@ -61,9 +61,14 @@ function mesh(geometry, material) {
   return object;
 }
 
-// The viewer encodes the project DOF topology directly:
-//   phi   -> yaw about world/local vertical Y axis
-//   theta -> pendulum rotation about distal local Z axis, orthogonal to arm X
+// Viewer mapping of the project rigid-body contract into Three.js coordinates:
+//   project +x -> viewer +X  (arm points radially outward when phi = 0)
+//   project +y -> viewer -Z  (preserves right-handed coordinates with Y-up)
+//   project +z -> viewer +Y  (vertical)
+// Therefore:
+//   phi   -> yaw about viewer +Y (project +z)
+//   theta -> rotation about viewer -X (project pendulum joint axis [-1, 0, 0])
+// The pendulum hinge is parallel to the radial arm at phi = 0, not transverse to it.
 // This is visualization semantics only; no dynamics are evaluated here.
 const base = mesh(new THREE.CylinderGeometry(0.52, 0.56, 0.22, 64), cream);
 base.position.y = 0.11;
@@ -98,15 +103,17 @@ const hinge = new THREE.Group();
 hinge.position.set(armLength, 0.38, 0);
 rotaryGroup.add(hinge);
 
-const yokeFront = mesh(new THREE.BoxGeometry(0.14, 0.34, 0.13), dark);
-yokeFront.position.z = 0.18;
-hinge.add(yokeFront);
-const yokeBack = yokeFront.clone();
-yokeBack.position.z = -0.18;
-hinge.add(yokeBack);
+// The bearing supports and axle are aligned with the radial arm (local X).
+// This makes the pendulum swing in the tangential/vertical Y-Z plane.
+const yokeInner = mesh(new THREE.BoxGeometry(0.13, 0.34, 0.14), dark);
+yokeInner.position.x = -0.16;
+hinge.add(yokeInner);
+const yokeOuter = yokeInner.clone();
+yokeOuter.position.x = 0.16;
+hinge.add(yokeOuter);
 
 const axle = mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.48, 32), metal);
-axle.rotation.x = Math.PI / 2;
+axle.rotation.z = Math.PI / 2;
 hinge.add(axle);
 
 const pendulumPivot = new THREE.Group();
@@ -122,7 +129,7 @@ pendulumCap.position.y = pendulumLength;
 pendulumPivot.add(pendulumCap);
 
 const pivotDisk = mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.10, 32), accent);
-pivotDisk.rotation.x = Math.PI / 2;
+pivotDisk.rotation.z = Math.PI / 2;
 pendulumPivot.add(pivotDisk);
 
 const axisMaterial = new THREE.LineBasicMaterial({ color: 0xf4b63d });
@@ -185,9 +192,10 @@ function renderFrame() {
   const sample = trace.samples[frame];
   const [theta, thetaDot, phi, phiDot] = sample.state;
 
-  // phi is the vertical base/arm yaw; theta is the distal horizontal-hinge rotation.
+  // Three.js is Y-up, while the project contract is Z-up. Under the mapping above,
+  // project +theta about the declared -X hinge is viewer rotation about -X.
   rotaryGroup.rotation.y = phi;
-  pendulumPivot.rotation.z = theta;
+  pendulumPivot.rotation.x = -theta;
 
   document.querySelector('#theta').textContent = `${degrees(theta).toFixed(3)}°`;
   document.querySelector('#theta-dot').textContent = `${thetaDot.toFixed(3)} rad/s`;
