@@ -43,7 +43,6 @@ use crate::SitlSystem;
 
 const ESTIMATOR_RATE_FILTER_ALPHA: f32 = 1.0;
 
-const TARGET_ENERGY_J: f32 = 0.025;
 const ENERGY_TORQUE_GAIN: f32 = 0.175;
 const MAX_ABS_TORQUE_NM: f32 = 0.05;
 const SWING_KICK_TORQUE_NM: f32 = 0.01;
@@ -709,18 +708,31 @@ impl SitlSystem for RotarySitlSystem {
     }
 }
 
+fn upright_target_energy_j(parameters: FurutaParameters) -> Result<f32, Box<dyn Error>> {
+    let target = 2.0
+        * parameters.pendulum_mass_kg
+        * parameters.gravity_m_s2
+        * parameters.pendulum_com_length_m;
+    if target.is_finite() && target > 0.0 {
+        Ok(target)
+    } else {
+        Err(boxed("invalid plant-derived swing-up target energy"))
+    }
+}
+
 fn hybrid_controller(
     parameters: FurutaParameters,
     balance_controller_profile: BalanceControllerProfile,
 ) -> Result<HybridController, Box<dyn Error>> {
     let balance = LqrController::new(balance_controller_profile.gains())
         .map_err(|error| boxed(format!("balance controller setup: {error:?}")))?;
+    let target_energy_j = upright_target_energy_j(parameters)?;
     let swing = EnergySwingUpController::new(EnergySwingUpConfig {
         pendulum_mass_kg: parameters.pendulum_mass_kg,
         pendulum_com_length_m: parameters.pendulum_com_length_m,
         pendulum_inertia_kg_m2: parameters.pendulum_inertia_kg_m2,
         gravity_m_s2: parameters.gravity_m_s2,
-        target_energy_j: TARGET_ENERGY_J,
+        target_energy_j,
         energy_gain: ENERGY_TORQUE_GAIN,
         max_abs_torque_nm: MAX_ABS_TORQUE_NM,
         kick_torque_nm: SWING_KICK_TORQUE_NM,
@@ -822,6 +834,23 @@ mod tests {
                 initial_phi_dot_rad_s: 0.0,
             }),
         }
+    }
+
+    #[test]
+    fn plant_derived_swing_up_target_matches_reference_upright_energy() {
+        let p = parameters().plant;
+        let plant = FurutaParameters {
+            pendulum_mass_kg: p.pendulum_mass_kg.value,
+            arm_length_m: p.arm_length_m.value,
+            pendulum_com_length_m: p.pendulum_com_length_m.value,
+            arm_inertia_kg_m2: p.arm_inertia_kg_m2.value,
+            pendulum_inertia_kg_m2: p.pendulum_inertia_kg_m2.value,
+            gravity_m_s2: p.gravity_m_s2.value,
+            arm_viscous_damping_nm_per_rad_s: p.arm_viscous_damping_nm_per_rad_s.value,
+            pendulum_viscous_damping_nm_per_rad_s: p.pendulum_viscous_damping_nm_per_rad_s.value,
+        };
+        let target = upright_target_energy_j(plant).unwrap();
+        assert!((target - 0.101_239_2).abs() < 1.0e-6);
     }
 
     #[test]
