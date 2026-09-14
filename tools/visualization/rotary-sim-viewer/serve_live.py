@@ -10,6 +10,7 @@ No Furuta dynamics or controller logic are implemented here.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
 import subprocess
@@ -29,14 +30,35 @@ SCENARIOS = {
     "swingup": ROOT / "tools" / "sitl" / "scenarios" / "rotary_swingup.toml",
 }
 
-# Closing a browser EventSource is a normal end-of-stream condition. Different
-# platforms surface that closed client socket through different ConnectionError
-# subclasses; Windows commonly reports WSAECONNABORTED as ConnectionAbortedError.
+# Closing a browser EventSource is a normal end-of-stream condition. Python and
+# Windows do not always surface that socket close through the same exception
+# subclass, so classify both portable errno values and Winsock-specific codes.
 CLIENT_DISCONNECT_ERRORS = (
     BrokenPipeError,
     ConnectionResetError,
     ConnectionAbortedError,
 )
+CLIENT_DISCONNECT_ERRNOS = {
+    errno.EPIPE,
+    errno.ECONNRESET,
+    errno.ECONNABORTED,
+}
+CLIENT_DISCONNECT_WINERRORS = {
+    10053,  # WSAECONNABORTED
+    10054,  # WSAECONNRESET
+    10058,  # WSAESHUTDOWN
+}
+
+
+def is_client_disconnect(error: BaseException) -> bool:
+    if isinstance(error, CLIENT_DISCONNECT_ERRORS):
+        return True
+    if isinstance(error, OSError):
+        if error.errno in CLIENT_DISCONNECT_ERRNOS:
+            return True
+        if getattr(error, "winerror", None) in CLIENT_DISCONNECT_WINERRORS:
+            return True
+    return False
 
 
 def sse_payload(event: str, payload: object) -> bytes:
@@ -105,6 +127,16 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         print(f"[{self.log_date_time_string()}] {fmt % args}")
 
+    def finish(self) -> None:
+        # StreamRequestHandler.finish() flushes wfile after do_GET returns. If the
+        # browser intentionally closed EventSource, Windows may report that final
+        # flush as WSAECONNABORTED. That is not a server failure.
+        try:
+            super().finish()
+        except OSError as error:
+            if not is_client_disconnect(error):
+                raise
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
@@ -119,6 +151,16 @@ class Handler(SimpleHTTPRequestHandler):
             self.stream_live(parsed.query)
             return
         super().do_GET()
+
+    def write_sse(self, event: str, payload: object) -> bool:
+        try:
+            self.wfile.write(sse_payload(event, payload))
+            self.wfile.flush()
+            return True
+        except OSError as error:
+            if is_client_disconnect(error):
+                return False
+            raise
 
     def stream_live(self, query: str) -> None:
         params = parse_qs(query)
@@ -146,55 +188,57 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
-        run_index = 0
+        # One Live click owns one finite SITL experiment. Replaying finite 5 s
+        # scenarios in an endless server loop caused an artificial state reset at
+        # every scenario boundary, visible as a periodic twitch in the 3-D model.
+        # A genuinely continuous live lane should eventually come from an
+        # incremental SITL observer, not from stitching deterministic runs.
+        run_index = 1
         try:
-            while True:
-                run_index += 1
-                self.wfile.write(sse_payload("status", {
-                    "phase": "simulating",
-                    "scenario": scenario_key,
-                    "run": run_index,
-                }))
-                self.wfile.flush()
+            if not self.write_sse("status", {
+                "phase": "simulating",
+                "scenario": scenario_key,
+                "run": run_index,
+            }):
+                return
 
-                payload = run_sitl(scenario_key)
-                frames = display_frames(payload["samples"], fps)
-                self.wfile.write(sse_payload("meta", {
-                    "schema": payload["schema"],
-                    "source": payload["source"],
-                    "state_order": payload["state_order"],
-                    "scenario": scenario_key,
-                    "run": run_index,
-                    "source_samples": len(payload["samples"]),
-                    "display_frames": len(frames),
-                    "display_fps_limit": fps,
-                    "speed": speed,
-                }))
-                self.wfile.flush()
+            payload = run_sitl(scenario_key)
+            frames = display_frames(payload["samples"], fps)
+            if not self.write_sse("meta", {
+                "schema": payload["schema"],
+                "source": payload["source"],
+                "state_order": payload["state_order"],
+                "scenario": scenario_key,
+                "run": run_index,
+                "source_samples": len(payload["samples"]),
+                "display_frames": len(frames),
+                "display_fps_limit": fps,
+                "speed": speed,
+            }):
+                return
 
-                previous_t = None
-                for sample in frames:
-                    t_s = float(sample["t_s"])
-                    if previous_t is not None:
-                        time.sleep(max(0.0, (t_s - previous_t) / speed))
-                    self.wfile.write(sse_payload("sample", sample))
-                    self.wfile.flush()
-                    previous_t = t_s
+            previous_t = None
+            for sample in frames:
+                t_s = float(sample["t_s"])
+                if previous_t is not None:
+                    time.sleep(max(0.0, (t_s - previous_t) / speed))
+                if not self.write_sse("sample", sample):
+                    return
+                previous_t = t_s
 
-                self.wfile.write(sse_payload("status", {
-                    "phase": "run-complete",
-                    "scenario": scenario_key,
-                    "run": run_index,
-                }))
-                self.wfile.flush()
-        except CLIENT_DISCONNECT_ERRORS:
-            return
-        except Exception as error:  # surface local tool failures to the UI
+            self.write_sse("status", {
+                "phase": "run-complete",
+                "scenario": scenario_key,
+                "run": run_index,
+            })
+        except Exception as error:  # surface real local tool failures to the UI
+            if is_client_disconnect(error):
+                return
             try:
-                self.wfile.write(sse_payload("stream-error", {"message": str(error)}))
-                self.wfile.flush()
-            except CLIENT_DISCONNECT_ERRORS:
-                pass
+                self.write_sse("stream-error", {"message": str(error)})
+            except Exception as write_error:
+                if not is_client_disconnect(write_error):
+                    raise
 
 
 def main() -> int:
