@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Serve the Rotary viewer and stream fresh SITL runs over Server-Sent Events.
+"""Serve the Rotary viewer and stream persistent incremental SITL over SSE.
 
 The browser remains a read-only evidence consumer. This server launches the
-existing `rip-sitl` binary, normalizes its completed JSONL evidence with the
-existing adapter, and streams display frames to the viewer at wall-clock pace.
-No Furuta dynamics or controller logic are implemented here.
+existing Rust semantic path through `rip-sitl-live`, forwards timestamped
+samples at a display-limited rate, and terminates the child when the browser
+stops or disconnects. No Furuta dynamics or controller logic live here.
 """
 
 from __future__ import annotations
@@ -14,13 +14,10 @@ import errno
 import json
 import math
 import subprocess
-import tempfile
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-
-from adapt_sitl_trace import load_json, load_jsonl, normalize
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -30,9 +27,6 @@ SCENARIOS = {
     "swingup": ROOT / "tools" / "sitl" / "scenarios" / "rotary_swingup.toml",
 }
 
-# Closing a browser EventSource is a normal end-of-stream condition. Python and
-# Windows do not always surface that socket close through the same exception
-# subclass, so classify both portable errno values and Winsock-specific codes.
 CLIENT_DISCONNECT_ERRORS = (
     BrokenPipeError,
     ConnectionResetError,
@@ -66,56 +60,30 @@ def sse_payload(event: str, payload: object) -> bytes:
     return f"event: {event}\ndata: {data}\n\n".encode("utf-8")
 
 
-def display_frames(samples: list[dict], fps: float) -> list[dict]:
-    if len(samples) <= 2:
-        return samples
-    period = 1.0 / fps
-    selected = [samples[0]]
-    next_t = float(samples[0]["t_s"]) + period
-    for sample in samples[1:-1]:
-        t_s = float(sample["t_s"])
-        if t_s + 1e-12 >= next_t:
-            selected.append(sample)
-            while next_t <= t_s + 1e-12:
-                next_t += period
-    if selected[-1] is not samples[-1]:
-        selected.append(samples[-1])
-    return selected
+def live_command(scenario_key: str) -> list[str]:
+    return [
+        "cargo",
+        "run",
+        "--quiet",
+        "--manifest-path",
+        str(ROOT / "tools" / "sitl" / "Cargo.toml"),
+        "--bin",
+        "rip-sitl-live",
+        "--",
+        "--scenario",
+        str(SCENARIOS[scenario_key]),
+    ]
 
 
-def run_sitl(scenario_key: str) -> dict:
-    scenario = SCENARIOS[scenario_key]
-    with tempfile.TemporaryDirectory(prefix="rotary-sitl-live-") as temp:
-        output = Path(temp) / "run"
-        command = [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(ROOT / "tools" / "sitl" / "Cargo.toml"),
-            "--bin",
-            "rip-sitl",
-            "--",
-            "--scenario",
-            str(scenario),
-            "--output",
-            str(output),
-        ]
-        completed = subprocess.run(
-            command,
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-        if completed.returncode != 0:
-            detail = completed.stderr.strip() or completed.stdout.strip() or "unknown SITL failure"
-            raise RuntimeError(detail)
-        manifest = load_json(output / "manifest.json")
-        payload = normalize(load_jsonl(output / "trace.jsonl"), manifest)
-        payload["source"]["transport"] = "fresh rip-sitl run streamed by local SSE bridge"
-        return payload
+def stop_process(process: subprocess.Popen[str] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1.0)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -128,9 +96,6 @@ class Handler(SimpleHTTPRequestHandler):
         print(f"[{self.log_date_time_string()}] {fmt % args}")
 
     def finish(self) -> None:
-        # StreamRequestHandler.finish() flushes wfile after do_GET returns. If the
-        # browser intentionally closed EventSource, Windows may report that final
-        # flush as WSAECONNABORTED. That is not a server failure.
         try:
             super().finish()
         except OSError as error:
@@ -188,57 +153,100 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
-        # One Live click owns one finite SITL experiment. Replaying finite 5 s
-        # scenarios in an endless server loop caused an artificial state reset at
-        # every scenario boundary, visible as a periodic twitch in the 3-D model.
-        # A genuinely continuous live lane should eventually come from an
-        # incremental SITL observer, not from stitching deterministic runs.
-        run_index = 1
+        process: subprocess.Popen[str] | None = None
         try:
-            if not self.write_sse("status", {
-                "phase": "simulating",
-                "scenario": scenario_key,
-                "run": run_index,
-            }):
+            if not self.write_sse(
+                "status",
+                {"phase": "starting", "scenario": scenario_key},
+            ):
                 return
 
-            payload = run_sitl(scenario_key)
-            frames = display_frames(payload["samples"], fps)
-            if not self.write_sse("meta", {
-                "schema": payload["schema"],
-                "source": payload["source"],
-                "state_order": payload["state_order"],
-                "scenario": scenario_key,
-                "run": run_index,
-                "source_samples": len(payload["samples"]),
-                "display_frames": len(frames),
-                "display_fps_limit": fps,
-                "speed": speed,
-            }):
-                return
+            process = subprocess.Popen(
+                live_command(scenario_key),
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=1,
+            )
+            assert process.stdout is not None
 
-            previous_t = None
-            for sample in frames:
+            meta_sent = False
+            last_display_t: float | None = None
+            next_display_t: float | None = None
+            wall_anchor: float | None = None
+            sim_anchor: float | None = None
+            display_period = 1.0 / fps
+
+            for raw in process.stdout:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError as error:
+                    raise RuntimeError(f"invalid rip-sitl-live JSON: {error}: {line[:160]}") from error
+
+                message_type = message.get("type")
+                if message_type == "meta":
+                    meta = {
+                        "schema": message["schema"],
+                        "source": message["source"],
+                        "state_order": message["state_order"],
+                        "scenario": scenario_key,
+                        "display_fps_limit": fps,
+                        "speed": speed,
+                        "transport": "persistent incremental rip-sitl-live",
+                    }
+                    if not self.write_sse("meta", meta):
+                        return
+                    meta_sent = True
+                    continue
+
+                if message_type != "sample":
+                    continue
+                if not meta_sent:
+                    raise RuntimeError("rip-sitl-live emitted a sample before metadata")
+
+                sample = message["sample"]
                 t_s = float(sample["t_s"])
-                if previous_t is not None:
-                    time.sleep(max(0.0, (t_s - previous_t) / speed))
+                if next_display_t is None:
+                    next_display_t = t_s
+                if t_s + 1e-12 < next_display_t:
+                    continue
+
+                while next_display_t <= t_s + 1e-12:
+                    next_display_t += display_period
+
+                if wall_anchor is None:
+                    wall_anchor = time.perf_counter()
+                    sim_anchor = t_s
+                else:
+                    assert sim_anchor is not None
+                    target_wall = wall_anchor + (t_s - sim_anchor) / speed
+                    delay = target_wall - time.perf_counter()
+                    if delay > 0:
+                        time.sleep(delay)
+
                 if not self.write_sse("sample", sample):
                     return
-                previous_t = t_s
+                last_display_t = t_s
 
-            self.write_sse("status", {
-                "phase": "run-complete",
-                "scenario": scenario_key,
-                "run": run_index,
-            })
-        except Exception as error:  # surface real local tool failures to the UI
+            return_code = process.wait()
+            if return_code != 0:
+                stderr = process.stderr.read().strip() if process.stderr else ""
+                raise RuntimeError(stderr or f"rip-sitl-live exited with code {return_code}")
+
+            self.write_sse(
+                "status",
+                {"phase": "ended", "scenario": scenario_key, "t_s": last_display_t},
+            )
+        except Exception as error:
             if is_client_disconnect(error):
                 return
-            try:
-                self.write_sse("stream-error", {"message": str(error)})
-            except Exception as write_error:
-                if not is_client_disconnect(write_error):
-                    raise
+            self.write_sse("stream-error", {"message": str(error)})
+        finally:
+            stop_process(process)
 
 
 def main() -> int:
