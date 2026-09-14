@@ -36,6 +36,38 @@ The initial console provides:
 
 The demo trace is **not dynamics evidence**. It exists only to exercise rendering/replay behavior.
 
+## SITL adapter
+
+`adapt_sitl_trace.py` projects existing SITL JSONL evidence into the viewer schema. It does not integrate dynamics, run a controller, alter the source trace, or create a new authority claim.
+
+Self-test the adapter:
+
+```bash
+python tools/visualization/rotary-sim-viewer/adapt_sitl_trace.py --self-test
+```
+
+Convert a SITL run:
+
+```bash
+python tools/visualization/rotary-sim-viewer/adapt_sitl_trace.py \
+  --trace target/sitl/<run>/trace.jsonl \
+  --manifest target/sitl/<run>/manifest.json \
+  --output target/viewer/rotary-sitl.json
+```
+
+Then use **Load trace** in the console and select `target/viewer/rotary-sitl.json`.
+
+The adapter groups records by SITL virtual time and preserves the canonical truth state. Where present it also carries forward:
+
+- control regime;
+- requested arm torque;
+- applied virtual arm torque;
+- runtime state;
+- authority decision;
+- estimated state.
+
+The viewer's primary `arm_torque_nm` field is the applied virtual torque when available. The requested and applied values remain separately present in normalized samples for later UI expansion.
+
 ## Normalized viewer trace
 
 ```json
@@ -60,7 +92,7 @@ The demo trace is **not dynamics evidence**. It exists only to exercise renderin
 }
 ```
 
-Adapters for existing SITL/model/rigid-body outputs should be generated host-side so original evidence files remain authoritative and unchanged.
+Adapters for existing SITL/model/rigid-body outputs are generated host-side so original evidence files remain authoritative and unchanged.
 
 ## DOF convention
 
