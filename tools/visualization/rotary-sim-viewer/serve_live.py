@@ -29,6 +29,15 @@ SCENARIOS = {
     "swingup": ROOT / "tools" / "sitl" / "scenarios" / "rotary_swingup.toml",
 }
 
+# Closing a browser EventSource is a normal end-of-stream condition. Different
+# platforms surface that closed client socket through different ConnectionError
+# subclasses; Windows commonly reports WSAECONNABORTED as ConnectionAbortedError.
+CLIENT_DISCONNECT_ERRORS = (
+    BrokenPipeError,
+    ConnectionResetError,
+    ConnectionAbortedError,
+)
+
 
 def sse_payload(event: str, payload: object) -> bytes:
     data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
@@ -178,13 +187,13 @@ class Handler(SimpleHTTPRequestHandler):
                     "run": run_index,
                 }))
                 self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
+        except CLIENT_DISCONNECT_ERRORS:
             return
         except Exception as error:  # surface local tool failures to the UI
             try:
                 self.wfile.write(sse_payload("stream-error", {"message": str(error)}))
                 self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
+            except CLIENT_DISCONNECT_ERRORS:
                 pass
 
 
