@@ -7,11 +7,17 @@ const timeline = document.querySelector('#timeline');
 const playButton = document.querySelector('#play');
 const resetButton = document.querySelector('#reset');
 const traceFile = document.querySelector('#trace-file');
+const liveStartButton = document.querySelector('#live-start');
+const liveStopButton = document.querySelector('#live-stop');
+const liveScenario = document.querySelector('#live-scenario');
+const liveSpeed = document.querySelector('#live-speed');
+const liveChip = document.querySelector('#live-chip');
 
 let trace = null;
 let frame = 0;
 let playing = false;
 let lastAdvanceMs = 0;
+let liveSource = null;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x303438);
@@ -62,14 +68,8 @@ function mesh(geometry, material) {
 }
 
 // Viewer mapping of the project rigid-body contract into Three.js coordinates:
-//   project +x -> viewer +X  (arm points radially outward when phi = 0)
-//   project +y -> viewer -Z  (preserves right-handed coordinates with Y-up)
-//   project +z -> viewer +Y  (vertical)
-// Therefore:
-//   phi   -> yaw about viewer +Y (project +z)
-//   theta -> rotation about viewer -X (project pendulum joint axis [-1, 0, 0])
-// The pendulum hinge is parallel to the radial arm at phi = 0, not transverse to it.
-// This is visualization semantics only; no dynamics are evaluated here.
+// project +x -> viewer +X, project +y -> viewer -Z, project +z -> viewer +Y.
+// phi -> viewer +Y yaw; theta -> viewer -X rotation.
 const base = mesh(new THREE.CylinderGeometry(0.52, 0.56, 0.22, 64), cream);
 base.position.y = 0.11;
 scene.add(base);
@@ -103,8 +103,6 @@ const hinge = new THREE.Group();
 hinge.position.set(armLength, 0.38, 0);
 rotaryGroup.add(hinge);
 
-// The bearing supports and axle are aligned with the radial arm (local X).
-// This makes the pendulum swing in the tangential/vertical Y-Z plane.
 const yokeInner = mesh(new THREE.BoxGeometry(0.13, 0.34, 0.14), dark);
 yokeInner.position.x = -0.16;
 hinge.add(yokeInner);
@@ -154,27 +152,50 @@ function degrees(rad) {
   return rad * 180 / Math.PI;
 }
 
-function validateTrace(candidate) {
-  if (!candidate || candidate.schema !== 1) throw new Error('viewer trace schema must be 1');
-  if (!Array.isArray(candidate.state_order) || candidate.state_order.join('|') !== REQUIRED_STATE_ORDER.join('|')) {
+function validateStateOrder(order) {
+  if (!Array.isArray(order) || order.join('|') !== REQUIRED_STATE_ORDER.join('|')) {
     throw new Error(`state_order must be [${REQUIRED_STATE_ORDER.join(', ')}]`);
   }
+}
+
+function validateSample(sample, index = 0) {
+  if (!Number.isFinite(sample.t_s)) throw new Error(`sample ${index}: invalid t_s`);
+  if (!Array.isArray(sample.state) || sample.state.length !== 4 || !sample.state.every(Number.isFinite)) {
+    throw new Error(`sample ${index}: state must contain four finite numbers`);
+  }
+  return sample;
+}
+
+function validateTrace(candidate) {
+  if (!candidate || candidate.schema !== 1) throw new Error('viewer trace schema must be 1');
+  validateStateOrder(candidate.state_order);
   if (!Array.isArray(candidate.samples) || candidate.samples.length === 0) {
     throw new Error('trace must contain at least one sample');
   }
-  candidate.samples.forEach((sample, index) => {
-    if (!Number.isFinite(sample.t_s)) throw new Error(`sample ${index}: invalid t_s`);
-    if (!Array.isArray(sample.state) || sample.state.length !== 4 || !sample.state.every(Number.isFinite)) {
-      throw new Error(`sample ${index}: state must contain four finite numbers`);
-    }
-  });
+  candidate.samples.forEach(validateSample);
   return candidate;
 }
 
+function stopLive(label = 'LIVE: disconnected') {
+  if (liveSource) {
+    liveSource.close();
+    liveSource = null;
+  }
+  liveStartButton.disabled = false;
+  liveStopButton.disabled = true;
+  liveScenario.disabled = false;
+  liveSpeed.disabled = false;
+  liveChip.textContent = label;
+}
+
 function setTrace(nextTrace, label) {
+  stopLive();
   trace = validateTrace(nextTrace);
   frame = 0;
   playing = false;
+  playButton.disabled = false;
+  resetButton.disabled = false;
+  timeline.disabled = false;
   playButton.textContent = '▶ Play';
   timeline.min = '0';
   timeline.max = String(trace.samples.length - 1);
@@ -187,13 +208,15 @@ function sourceField(name, fallback = '—') {
   return trace?.source?.[name] ?? fallback;
 }
 
+function torqueText(value) {
+  return Number.isFinite(value) ? `${Number(value).toFixed(4)} Nm` : '—';
+}
+
 function renderFrame() {
-  if (!trace) return;
+  if (!trace || trace.samples.length === 0) return;
   const sample = trace.samples[frame];
   const [theta, thetaDot, phi, phiDot] = sample.state;
 
-  // Three.js is Y-up, while the project contract is Z-up. Under the mapping above,
-  // project +theta about the declared -X hinge is viewer rotation about -X.
   rotaryGroup.rotation.y = phi;
   pendulumPivot.rotation.x = -theta;
 
@@ -201,8 +224,12 @@ function renderFrame() {
   document.querySelector('#theta-dot').textContent = `${thetaDot.toFixed(3)} rad/s`;
   document.querySelector('#phi').textContent = `${degrees(phi).toFixed(3)}°`;
   document.querySelector('#phi-dot').textContent = `${phiDot.toFixed(3)} rad/s`;
-  document.querySelector('#torque').textContent = `${Number(sample.arm_torque_nm ?? 0).toFixed(4)} Nm`;
+  document.querySelector('#torque').textContent = torqueText(sample.arm_torque_nm ?? 0);
+  document.querySelector('#requested-torque').textContent = torqueText(sample.requested_arm_torque_nm);
+  document.querySelector('#applied-torque').textContent = torqueText(sample.applied_arm_torque_nm);
   document.querySelector('#regime').textContent = sample.control_regime ?? '—';
+  document.querySelector('#runtime-state').textContent = sample.runtime_state ?? '—';
+  document.querySelector('#authority').textContent = sample.authority ?? '—';
   document.querySelector('#model-class').textContent = sourceField('model_class');
   document.querySelector('#backend').textContent = sourceField('backend');
   document.querySelector('#scope').textContent = sourceField('scope', 'No evidence scope declared.');
@@ -219,14 +246,84 @@ async function loadDefaultTrace() {
   setTrace(await response.json(), 'synthetic UI demo');
 }
 
+function startLive() {
+  stopLive();
+  playing = false;
+  playButton.textContent = '▶ Play';
+  playButton.disabled = true;
+  resetButton.disabled = true;
+  timeline.disabled = true;
+  liveStartButton.disabled = true;
+  liveStopButton.disabled = false;
+  liveScenario.disabled = true;
+  liveSpeed.disabled = true;
+  liveChip.textContent = 'LIVE: connecting';
+  document.querySelector('#trace-status').textContent = 'live SITL stream';
+
+  const params = new URLSearchParams({
+    scenario: liveScenario.value,
+    speed: liveSpeed.value,
+    fps: '60',
+  });
+  liveSource = new EventSource(`/api/live?${params.toString()}`);
+
+  liveSource.addEventListener('status', (event) => {
+    const status = JSON.parse(event.data);
+    if (status.phase === 'simulating') {
+      liveChip.textContent = `LIVE: SITL run ${status.run}`;
+    } else if (status.phase === 'run-complete') {
+      liveChip.textContent = `LIVE: loop ${status.run} complete`;
+    }
+  });
+
+  liveSource.addEventListener('meta', (event) => {
+    const meta = JSON.parse(event.data);
+    validateStateOrder(meta.state_order);
+    trace = {
+      schema: 1,
+      source: meta.source,
+      state_order: meta.state_order,
+      samples: [],
+    };
+    frame = 0;
+    timeline.min = '0';
+    timeline.max = '0';
+    timeline.value = '0';
+    liveChip.textContent = `LIVE: ${meta.scenario} · run ${meta.run}`;
+  });
+
+  liveSource.addEventListener('sample', (event) => {
+    const sample = validateSample(JSON.parse(event.data), trace?.samples?.length ?? 0);
+    if (!trace) return;
+    trace.samples.push(sample);
+    frame = trace.samples.length - 1;
+    timeline.max = String(frame);
+    renderFrame();
+  });
+
+  liveSource.addEventListener('stream-error', (event) => {
+    const detail = JSON.parse(event.data);
+    document.querySelector('#scope').textContent = `Live stream error: ${detail.message}`;
+    stopLive('LIVE: error');
+  });
+
+  liveSource.onerror = () => {
+    if (liveSource) {
+      document.querySelector('#trace-status').textContent = 'live server unavailable or disconnected';
+      stopLive('LIVE: disconnected');
+    }
+  };
+}
+
 playButton.addEventListener('click', () => {
-  if (!trace) return;
+  if (!trace || liveSource) return;
   playing = !playing;
   playButton.textContent = playing ? '❚❚ Pause' : '▶ Play';
   lastAdvanceMs = performance.now();
 });
 
 resetButton.addEventListener('click', () => {
+  if (liveSource) return;
   playing = false;
   playButton.textContent = '▶ Play';
   frame = 0;
@@ -234,6 +331,7 @@ resetButton.addEventListener('click', () => {
 });
 
 timeline.addEventListener('input', () => {
+  if (liveSource) return;
   playing = false;
   playButton.textContent = '▶ Play';
   frame = Number(timeline.value);
@@ -253,11 +351,14 @@ traceFile.addEventListener('change', async () => {
   }
 });
 
+liveStartButton.addEventListener('click', startLive);
+liveStopButton.addEventListener('click', () => stopLive('LIVE: stopped'));
+
 function animate(now) {
   requestAnimationFrame(animate);
   controls.update();
 
-  if (playing && trace && trace.samples.length > 1) {
+  if (playing && trace && trace.samples.length > 1 && !liveSource) {
     const current = trace.samples[frame];
     const nextIndex = frame + 1;
     if (nextIndex >= trace.samples.length) {
@@ -278,6 +379,7 @@ function animate(now) {
 }
 
 window.addEventListener('resize', resize);
+window.addEventListener('beforeunload', () => stopLive());
 resize();
 loadDefaultTrace().catch((error) => {
   document.querySelector('#scope').textContent = error.message;
