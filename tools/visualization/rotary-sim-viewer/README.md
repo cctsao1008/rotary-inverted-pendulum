@@ -46,12 +46,20 @@ Self-test the adapter:
 python tools/visualization/rotary-sim-viewer/adapt_sitl_trace.py --self-test
 ```
 
-Convert a SITL run:
+Run a real Rotary SITL scenario first, for example:
+
+```bash
+cargo run --manifest-path tools/sitl/Cargo.toml --bin rip-sitl -- \
+  --scenario tools/sitl/scenarios/rotary_balance.toml \
+  --output target/sitl/rotary-balance
+```
+
+Then project that evidence into the viewer schema:
 
 ```bash
 python tools/visualization/rotary-sim-viewer/adapt_sitl_trace.py \
-  --trace target/sitl/<run>/trace.jsonl \
-  --manifest target/sitl/<run>/manifest.json \
+  --trace target/sitl/rotary-balance/trace.jsonl \
+  --manifest target/sitl/rotary-balance/manifest.json \
   --output target/viewer/rotary-sitl.json
 ```
 
@@ -102,8 +110,22 @@ The viewer follows the canonical project state order:
 [theta, theta_dot, phi, phi_dot]
 ```
 
-- `phi`: base/rotary-arm rotation about the vertical axis;
-- `theta`: pendulum rotation about the horizontal hinge at the arm tip.
+The authoritative geometry/sign contract is `tools/model/rigid_body/furuta_contract.json`:
+
+- project `phi`: arm rotation about project `+z` (vertical);
+- at `phi = 0`, the rotary arm points along project `+x`;
+- project `theta`: pendulum rotation about the declared joint axis `[-1, 0, 0]`, so the hinge axis is horizontal and parallel/anti-parallel to the radial arm at `phi = 0`;
+- positive `theta` moves the upright pendulum COM initially toward project `+y`.
+
+The Three.js scene is Y-up, so the viewer maps project coordinates as:
+
+```text
+project +x -> viewer +X
+project +y -> viewer -Z
+project +z -> viewer +Y
+```
+
+Under that right-handed mapping, positive project `theta` is rendered as rotation about viewer `-X`. The hinge/axle mesh is aligned to viewer X as well, so the visible mechanism and the replay transform encode the same DOF.
 
 The viewer must never reinterpret these axes simply to make an animation look nicer.
 
