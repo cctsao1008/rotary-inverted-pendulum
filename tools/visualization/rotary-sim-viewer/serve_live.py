@@ -95,6 +95,18 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         print(f"[{self.log_date_time_string()}] {fmt % args}")
 
+    def handle(self) -> None:
+        # Browser Stop intentionally aborts the long-lived EventSource socket.
+        # On Windows, the disconnect can surface while BaseHTTPRequestHandler is
+        # trying to read the next request line, after do_GET() has already
+        # returned. Catch it at the outer request-handler boundary as well as in
+        # the SSE writer/finish paths.
+        try:
+            super().handle()
+        except OSError as error:
+            if not is_client_disconnect(error):
+                raise
+
     def finish(self) -> None:
         try:
             super().finish()
@@ -146,10 +158,13 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_error(400, "fps must be in [5, 120]")
             return
 
+        # This request owns one long-lived SSE response and must never fall back
+        # into HTTP/1.1 keep-alive request parsing after the browser presses Stop.
+        self.close_connection = True
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
