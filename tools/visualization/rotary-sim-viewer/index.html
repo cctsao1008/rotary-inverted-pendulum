@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rotary Simulation Console</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">R</div>
+        <div>
+          <div class="brand-title">Rotary</div>
+          <div class="brand-subtitle">Simulation & Evidence Console</div>
+        </div>
+      </div>
+      <div class="top-status">
+        <div class="status-chip"><span class="dot dot-ok"></span><span id="model-chip">model: demo</span></div>
+        <div class="status-chip"><span id="backend-chip">backend: viewer</span></div>
+        <div class="status-chip status-danger">SIMULATION ONLY</div>
+      </div>
+    </header>
+
+    <div class="content-grid">
+      <aside class="sidebar">
+        <button class="nav-item active">Setup</button>
+        <button class="nav-item">Model</button>
+        <button class="nav-item">Controller</button>
+        <button class="nav-item">Simulation</button>
+        <button class="nav-item">Comparison</button>
+        <button class="nav-item">Evidence</button>
+        <button class="nav-item">Telemetry</button>
+        <button class="nav-item">Logs</button>
+      </aside>
+
+      <main class="main-panel">
+        <section class="scene-card">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Furuta Plant</div>
+              <div class="section-subtitle">Canonical DOF: φ base yaw · θ pendulum hinge</div>
+            </div>
+            <label class="file-button">Load trace<input id="trace-file" type="file" accept="application/json"></label>
+          </div>
+          <div id="scene"></div>
+          <div class="transport">
+            <button id="play">▶ Play</button>
+            <button id="reset">↺ Reset</button>
+            <input id="timeline" type="range" min="0" max="0" value="0" step="1">
+            <span id="time-readout">t = 0.000 s</span>
+          </div>
+        </section>
+      </main>
+
+      <aside class="right-panel">
+        <section class="info-card">
+          <div class="card-title">State</div>
+          <div class="kv"><span>θ</span><strong id="theta">0.000°</strong></div>
+          <div class="kv"><span>θ̇</span><strong id="theta-dot">0.000 rad/s</strong></div>
+          <div class="kv"><span>φ</span><strong id="phi">0.000°</strong></div>
+          <div class="kv"><span>φ̇</span><strong id="phi-dot">0.000 rad/s</strong></div>
+        </section>
+
+        <section class="info-card">
+          <div class="card-title">Control</div>
+          <div class="kv"><span>Regime</span><strong id="regime">—</strong></div>
+          <div class="kv"><span>Arm torque</span><strong id="torque">0.0000 Nm</strong></div>
+        </section>
+
+        <section class="info-card">
+          <div class="card-title">Evidence</div>
+          <div class="kv stacked"><span>Model class</span><strong id="model-class">—</strong></div>
+          <div class="kv stacked"><span>Backend</span><strong id="backend">—</strong></div>
+          <div class="scope" id="scope">No evidence loaded.</div>
+        </section>
+
+        <section class="authority-card">
+          <div class="authority-title">NO PHYSICAL AUTHORITY</div>
+          <div class="authority-copy">Viewer output cannot authorize motor actuation.</div>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="statusbar">
+      <span id="frame-status">frame 0 / 0</span>
+      <span>state order: [θ, θ̇, φ, φ̇]</span>
+      <span>viewer: read-only evidence consumer</span>
+      <span id="trace-status">demo trace</span>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
