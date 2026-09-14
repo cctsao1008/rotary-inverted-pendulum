@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "rip-sitl-live"
+path = "src/bin/rip_sitl_live.rs"
+
 [dependencies]
 rip-actuation-interface = { path = "../../firmware/interfaces/actuation" }
 rip-actuator-model = { path = "../../plant/actuator-model" }
