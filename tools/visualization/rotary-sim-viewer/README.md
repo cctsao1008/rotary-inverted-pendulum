@@ -8,6 +8,8 @@ The console is deliberately **read-only with respect to physics and authority**.
 
 ## Launch
 
+### Replay-only mode
+
 From the repository root:
 
 ```bash
@@ -20,16 +22,38 @@ Then open:
 http://localhost:8000/tools/visualization/rotary-sim-viewer/
 ```
 
+### Continuous SITL mode
+
+For continuous console animation backed by fresh `rip-sitl` runs, use the local live server instead of `http.server`:
+
+```bash
+python tools/visualization/rotary-sim-viewer/serve_live.py
+```
+
+Then open the same URL:
+
+```text
+http://127.0.0.1:8000/tools/visualization/rotary-sim-viewer/
+```
+
+Use the **Balance** or **Swing-up** selector and press **Live**. The server repeatedly launches the existing Rust `rip-sitl` scenario, normalizes the resulting authoritative SITL JSONL with `adapt_sitl_trace.py`, and streams display frames to the browser over Server-Sent Events (SSE). **Stop** closes the browser stream.
+
+The current live transport is deliberately run-backed rather than a second interactive physics engine: each cycle is a fresh deterministic SITL run, then its evidence is streamed at the selected wall-clock speed. This provides continuous visualization without moving dynamics or controller logic into JavaScript. A future incremental SITL observer can replace the run-backed transport without changing the viewer schema.
+
+The live server limits browser display transport to 60 fps by default. This is display projection only; the original SITL evidence remains at its native sample/event rate.
+
 The first MVP uses Three.js from a CDN, so the browser needs network access for that library. The evidence/trace files themselves remain local.
 
 ## MVP
 
-The initial console provides:
+The console provides:
 
 - configurator-style navigation and status layout;
 - a 3-D Furuta scene with the project DOF topology;
 - replay controls for a normalized JSON trace;
+- continuous run-backed SITL visualization for Balance and Swing-up;
 - live display of `[theta, theta_dot, phi, phi_dot]`;
+- requested/applied torque, runtime-state, and authority fields where present;
 - model/backend/evidence metadata;
 - a persistent `SIMULATION ONLY / NO PHYSICAL AUTHORITY` boundary;
 - an explicit synthetic demo trace for UI smoke testing.
@@ -74,7 +98,7 @@ The adapter groups records by SITL virtual time and preserves the canonical trut
 - authority decision;
 - estimated state.
 
-The viewer's primary `arm_torque_nm` field is the applied virtual torque when available. The requested and applied values remain separately present in normalized samples for later UI expansion.
+The viewer's primary `arm_torque_nm` field is the applied virtual torque when available. Requested and applied values remain separate fields.
 
 ## Normalized viewer trace
 
