@@ -2,6 +2,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.m
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 
 const REQUIRED_STATE_ORDER = ['theta', 'theta_dot', 'phi', 'phi_dot'];
+const LIVE_HISTORY_LIMIT = 3600;
 const sceneHost = document.querySelector('#scene');
 const timeline = document.querySelector('#timeline');
 const playButton = document.querySelector('#play');
@@ -18,6 +19,7 @@ let frame = 0;
 let playing = false;
 let lastAdvanceMs = 0;
 let liveSource = null;
+let liveFrameCount = 0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x303438);
@@ -67,7 +69,7 @@ function mesh(geometry, material) {
   return object;
 }
 
-// Viewer mapping of the project rigid-body contract into Three.js coordinates:
+// Viewer mapping of tools/model/rigid_body/furuta_contract.json:
 // project +x -> viewer +X, project +y -> viewer -Z, project +z -> viewer +Y.
 // phi -> viewer +Y yaw; theta -> viewer -X rotation.
 const base = mesh(new THREE.CylinderGeometry(0.52, 0.56, 0.22, 64), cream);
@@ -236,7 +238,9 @@ function renderFrame() {
   document.querySelector('#model-chip').textContent = `model: ${sourceField('model_class', 'unknown')}`;
   document.querySelector('#backend-chip').textContent = `backend: ${sourceField('backend', 'unknown')}`;
   document.querySelector('#time-readout').textContent = `t = ${sample.t_s.toFixed(3)} s`;
-  document.querySelector('#frame-status').textContent = `frame ${frame + 1} / ${trace.samples.length}`;
+  document.querySelector('#frame-status').textContent = liveSource
+    ? `live frame ${liveFrameCount}`
+    : `frame ${frame + 1} / ${trace.samples.length}`;
   timeline.value = String(frame);
 }
 
@@ -248,6 +252,7 @@ async function loadDefaultTrace() {
 
 function startLive() {
   stopLive();
+  liveFrameCount = 0;
   playing = false;
   playButton.textContent = '▶ Play';
   playButton.disabled = true;
@@ -258,7 +263,7 @@ function startLive() {
   liveScenario.disabled = true;
   liveSpeed.disabled = true;
   liveChip.textContent = 'LIVE: connecting';
-  document.querySelector('#trace-status').textContent = 'live SITL stream';
+  document.querySelector('#trace-status').textContent = 'persistent incremental SITL';
 
   const params = new URLSearchParams({
     scenario: liveScenario.value,
@@ -269,10 +274,10 @@ function startLive() {
 
   liveSource.addEventListener('status', (event) => {
     const status = JSON.parse(event.data);
-    if (status.phase === 'simulating') {
-      liveChip.textContent = `LIVE: SITL run ${status.run}`;
-    } else if (status.phase === 'run-complete') {
-      liveChip.textContent = `LIVE: loop ${status.run} complete`;
+    if (status.phase === 'starting') {
+      liveChip.textContent = 'LIVE: starting Rust SITL';
+    } else if (status.phase === 'ended') {
+      stopLive('LIVE: ended');
     }
   });
 
@@ -289,13 +294,15 @@ function startLive() {
     timeline.min = '0';
     timeline.max = '0';
     timeline.value = '0';
-    liveChip.textContent = `LIVE: ${meta.scenario} · run ${meta.run}`;
+    liveChip.textContent = `LIVE: ${meta.scenario}`;
   });
 
   liveSource.addEventListener('sample', (event) => {
-    const sample = validateSample(JSON.parse(event.data), trace?.samples?.length ?? 0);
+    const sample = validateSample(JSON.parse(event.data), liveFrameCount);
     if (!trace) return;
+    liveFrameCount += 1;
     trace.samples.push(sample);
+    if (trace.samples.length > LIVE_HISTORY_LIMIT) trace.samples.shift();
     frame = trace.samples.length - 1;
     timeline.max = String(frame);
     renderFrame();
