@@ -83,7 +83,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 "backend": "persistent production Rust SITL semantic path",
                 "scenario": scenario.id,
                 "balance_controller": cli.balance_controller.as_str(),
-                "scope": "simulation evidence only; persistent incremental run; diagnostic branch-torque recomputation is explanatory only; no physical actuator authority"
+                "scope": "simulation evidence only; persistent incremental run; Balance may use an explicit moving arm reference; diagnostic branch-torque recomputation is explanatory only; no physical actuator authority"
             }
         })
     )?;
@@ -172,6 +172,16 @@ fn viewer_sample(
         .get("control_regime")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
+    let balance_reference = merged
+        .get("balance_reference")
+        .and_then(Value::as_object)
+        .map(|reference| {
+            Ok::<(f64, f64), Box<dyn Error>>((
+                number(reference, "phi_ref_rad")?,
+                number(reference, "phi_dot_ref_rad_s")?,
+            ))
+        })
+        .transpose()?;
 
     let mut sample = Map::new();
     sample.insert("t_s".into(), json!(at.as_micros() as f64 * 1.0e-6));
@@ -190,6 +200,11 @@ fn viewer_sample(
     if let Some(value) = runtime_state {
         sample.insert("runtime_state".into(), json!(value));
     }
+    if let Some(reference) = merged.get("balance_reference") {
+        if !reference.is_null() {
+            sample.insert("balance_reference".into(), reference.clone());
+        }
+    }
     if let Some(estimated) = merged.get("estimated_state").and_then(Value::as_object) {
         let theta = number(estimated, "theta_rad")?;
         let theta_dot = number(estimated, "theta_dot_rad_s")?;
@@ -206,6 +221,7 @@ fn viewer_sample(
                 theta_dot,
                 phi,
                 phi_dot,
+                balance_reference,
                 regime,
                 parameters,
                 balance_controller,
@@ -221,6 +237,7 @@ fn hybrid_diagnostics(
     theta_dot: f64,
     phi: f64,
     phi_dot: f64,
+    balance_reference: Option<(f64, f64)>,
     regime: &str,
     parameters: &ReferenceAssemblyParameters,
     balance_controller: BalanceControllerProfile,
@@ -248,10 +265,18 @@ fn hybrid_diagnostics(
     let gains = balance_controller.gains();
     let u_theta = -(gains[0] as f64 * theta);
     let u_theta_dot = -(gains[1] as f64 * theta_dot);
-    let u_phi = -(gains[2] as f64 * phi);
-    let u_phi_dot = -(gains[3] as f64 * phi_dot);
     let capture_torque = u_theta + u_theta_dot;
-    let full_state_balance_torque = capture_torque + u_phi + u_phi_dot;
+
+    let global_u_phi = -(gains[2] as f64 * phi);
+    let global_u_phi_dot = -(gains[3] as f64 * phi_dot);
+    let global_zero_balance_torque = capture_torque + global_u_phi + global_u_phi_dot;
+
+    let (phi_ref, phi_dot_ref) = balance_reference.unwrap_or((0.0, 0.0));
+    let phi_error = phi - phi_ref;
+    let phi_dot_error = phi_dot - phi_dot_ref;
+    let tracking_u_phi = -(gains[2] as f64 * phi_error);
+    let tracking_u_phi_dot = -(gains[3] as f64 * phi_dot_error);
+    let tracking_balance_torque = capture_torque + tracking_u_phi + tracking_u_phi_dot;
 
     let capture_angle_eligible = theta.abs() <= CAPTURE_ENTER_ANGLE_RAD;
     let legacy_capture_rate_eligible = theta_dot.abs() <= LEGACY_CAPTURE_ENTER_RATE_RAD_S;
@@ -263,26 +288,26 @@ fn hybrid_diagnostics(
     let (active_u_phi, active_u_phi_dot, active_feedback_torque, active_controller) = match regime {
         "capture" => (0.0, 0.0, capture_torque, "capture_pendulum_subspace"),
         "balance" => (
-            u_phi,
-            u_phi_dot,
-            full_state_balance_torque,
-            "full_state_feedback",
+            tracking_u_phi,
+            tracking_u_phi_dot,
+            tracking_balance_torque,
+            "balance_reference_tracking",
         ),
         _ => (
-            u_phi,
-            u_phi_dot,
-            full_state_balance_torque,
+            global_u_phi,
+            global_u_phi_dot,
+            global_zero_balance_torque,
             "swing_up",
         ),
     };
 
     // Keep the old blend-named fields for the existing console logger. Their
     // value is now a selected-controller mirror: SwingUp uses EBC, Capture uses
-    // the theta/theta_dot projection, and Balance uses full-state feedback.
+    // the theta/theta_dot projection, and Balance uses moving-reference tracking.
     let capture_blend_weight = if state_feedback_active { 1.0 } else { 0.0 };
     let capture_blended_torque = match regime {
         "capture" => capture_torque,
-        "balance" => full_state_balance_torque,
+        "balance" => tracking_balance_torque,
         _ => swing_torque,
     };
 
@@ -292,7 +317,8 @@ fn hybrid_diagnostics(
         "energy_error_j": energy_error,
         "swing_torque_nm": swing_torque,
         "capture_torque_nm": capture_torque,
-        "balance_torque_nm": full_state_balance_torque,
+        "balance_torque_nm": tracking_balance_torque,
+        "global_zero_shadow_torque_nm": global_zero_balance_torque,
         "state_feedback_terms_nm": {
             "theta": u_theta,
             "theta_dot": u_theta_dot,
@@ -300,13 +326,26 @@ fn hybrid_diagnostics(
             "phi_dot": active_u_phi_dot,
             "sum": active_feedback_torque
         },
+        "balance_tracking_terms_nm": {
+            "theta": u_theta,
+            "theta_dot": u_theta_dot,
+            "phi": tracking_u_phi,
+            "phi_dot": tracking_u_phi_dot,
+            "sum": tracking_balance_torque
+        },
         "full_state_shadow_terms_nm": {
             "theta": u_theta,
             "theta_dot": u_theta_dot,
-            "phi": u_phi,
-            "phi_dot": u_phi_dot,
-            "sum": full_state_balance_torque
+            "phi": global_u_phi,
+            "phi_dot": global_u_phi_dot,
+            "sum": global_zero_balance_torque
         },
+        "balance_reference": balance_reference.map(|_| json!({
+            "phi_ref_rad": phi_ref,
+            "phi_dot_ref_rad_s": phi_dot_ref,
+            "phi_error_rad": phi_error,
+            "phi_dot_error_rad_s": phi_dot_error
+        })),
         "capture_projection_active": capture_projection_active,
         "capture_blend_weight": capture_blend_weight,
         "capture_blended_torque_nm": capture_blended_torque,
