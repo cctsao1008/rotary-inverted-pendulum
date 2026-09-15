@@ -1,9 +1,10 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-use libm::cosf;
+use libm::{cosf, expf};
 use rip_robot_domain::{
-    AngleRad, AngularRateRadPerSec, EstimatedState, GeneralizedDemand, StateValidity, TorqueNm,
+    AngleRad, AngularRateRadPerSec, EstimatedState, GeneralizedDemand, StateValidity, TimestampUs,
+    TorqueNm,
 };
 use rip_state_feedback::{Controller, LqrController, LqrError};
 
@@ -261,6 +262,37 @@ impl CapturePolicy {
     }
 }
 
+/// Optional moving arm reference used only after Capture has earned Balance.
+///
+/// The reference preserves canonical continuous/unwrapped arm state and instead
+/// changes the coordinates seen by the Balance controller. At handoff the
+/// current arm angle/rate are latched as zero tracking error; the rate reference
+/// then decays exponentially toward zero while the angle reference is integrated
+/// analytically from that decaying rate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BalanceReferenceConfig {
+    arm_rate_decay_time_constant_s: f32,
+}
+
+impl BalanceReferenceConfig {
+    pub fn new(arm_rate_decay_time_constant_s: f32) -> Option<Self> {
+        positive(arm_rate_decay_time_constant_s).then_some(Self {
+            arm_rate_decay_time_constant_s,
+        })
+    }
+
+    pub const fn arm_rate_decay_time_constant_s(self) -> f32 {
+        self.arm_rate_decay_time_constant_s
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BalanceReferenceState {
+    pub phi_ref: AngleRad,
+    pub phi_dot_ref: AngularRateRadPerSec,
+    pub updated_at: TimestampUs,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HybridControlError {
     SwingUp(SwingUpError),
@@ -274,9 +306,15 @@ pub struct HybridController {
     swing_up: EnergySwingUpController,
     balance: LqrController,
     capture: CapturePolicy,
+    balance_reference_config: Option<BalanceReferenceConfig>,
+    balance_reference: Option<BalanceReferenceState>,
 }
 
 impl HybridController {
+    /// Construct the legacy/global-zero Balance controller.
+    ///
+    /// Existing firmware/shadow call sites keep their current semantics. A
+    /// moving arm reference must be enabled explicitly by the caller.
     pub const fn new(
         swing_up: EnergySwingUpController,
         balance: LqrController,
@@ -286,6 +324,23 @@ impl HybridController {
             swing_up,
             balance,
             capture,
+            balance_reference_config: None,
+            balance_reference: None,
+        }
+    }
+
+    pub const fn new_with_balance_reference(
+        swing_up: EnergySwingUpController,
+        balance: LqrController,
+        capture: CapturePolicy,
+        balance_reference_config: BalanceReferenceConfig,
+    ) -> Self {
+        Self {
+            swing_up,
+            balance,
+            capture,
+            balance_reference_config: Some(balance_reference_config),
+            balance_reference: None,
         }
     }
 
@@ -293,8 +348,51 @@ impl HybridController {
         self.capture.regime()
     }
 
+    pub const fn balance_reference(&self) -> Option<BalanceReferenceState> {
+        self.balance_reference
+    }
+
     pub fn reset(&mut self) {
         self.capture.reset();
+        self.balance_reference = None;
+    }
+
+    fn balance_tracking_state(
+        &mut self,
+        state: &EstimatedState,
+        entered_balance: bool,
+    ) -> Result<EstimatedState, HybridControlError> {
+        let Some(config) = self.balance_reference_config else {
+            self.balance_reference = None;
+            return Ok(*state);
+        };
+
+        let reference = if entered_balance || self.balance_reference.is_none() {
+            BalanceReferenceState {
+                phi_ref: state.phi,
+                phi_dot_ref: state.phi_dot,
+                updated_at: state.timestamp,
+            }
+        } else {
+            advance_balance_reference(
+                self.balance_reference.expect("balance reference checked above"),
+                state.timestamp,
+                config,
+            )
+            .ok_or(HybridControlError::Numeric)?
+        };
+        self.balance_reference = Some(reference);
+
+        let tracking_state = EstimatedState {
+            phi: AngleRad(state.phi.0 - reference.phi_ref.0),
+            phi_dot: AngularRateRadPerSec(state.phi_dot.0 - reference.phi_dot_ref.0),
+            ..*state
+        };
+        if tracking_state.is_finite() {
+            Ok(tracking_state)
+        } else {
+            Err(HybridControlError::Numeric)
+        }
     }
 }
 
@@ -302,10 +400,16 @@ impl Controller for HybridController {
     type Error = HybridControlError;
 
     fn compute(&mut self, state: &EstimatedState) -> Result<GeneralizedDemand, Self::Error> {
+        let previous_regime = self.capture.regime();
         let regime = self
             .capture
             .update(state)
             .map_err(HybridControlError::Capture)?;
+
+        if regime != ControlRegime::Balance {
+            self.balance_reference = None;
+        }
+
         match regime {
             ControlRegime::SwingUp => self
                 .swing_up
@@ -322,10 +426,15 @@ impl Controller for HybridController {
                     .compute(&projected)
                     .map_err(HybridControlError::Balance)
             }
-            ControlRegime::Balance => self
-                .balance
-                .compute(state)
-                .map_err(HybridControlError::Balance),
+            ControlRegime::Balance => {
+                let tracking_state = self.balance_tracking_state(
+                    state,
+                    previous_regime != ControlRegime::Balance,
+                )?;
+                self.balance
+                    .compute(&tracking_state)
+                    .map_err(HybridControlError::Balance)
+            }
         }
     }
 }
@@ -336,6 +445,43 @@ fn pendulum_capture_projection(state: &EstimatedState) -> EstimatedState {
         phi_dot: AngularRateRadPerSec(0.0),
         ..*state
     }
+}
+
+fn advance_balance_reference(
+    reference: BalanceReferenceState,
+    timestamp: TimestampUs,
+    config: BalanceReferenceConfig,
+) -> Option<BalanceReferenceState> {
+    let delta_us = timestamp.0.checked_sub(reference.updated_at.0)?;
+    let dt_s = delta_us as f32 * 1.0e-6;
+    if !dt_s.is_finite() {
+        return None;
+    }
+    if dt_s == 0.0 {
+        return Some(BalanceReferenceState {
+            updated_at: timestamp,
+            ..reference
+        });
+    }
+
+    let tau_s = config.arm_rate_decay_time_constant_s();
+    let decay = expf(-dt_s / tau_s);
+    if !decay.is_finite() || !(0.0..=1.0).contains(&decay) {
+        return None;
+    }
+
+    let phi_dot_0 = reference.phi_dot_ref.0;
+    let phi_dot_ref = phi_dot_0 * decay;
+    let phi_ref = reference.phi_ref.0 + phi_dot_0 * tau_s * (1.0 - decay);
+    if !phi_ref.is_finite() || !phi_dot_ref.is_finite() {
+        return None;
+    }
+
+    Some(BalanceReferenceState {
+        phi_ref: AngleRad(phi_ref),
+        phi_dot_ref: AngularRateRadPerSec(phi_dot_ref),
+        updated_at: timestamp,
+    })
 }
 
 fn within_angle(state: &EstimatedState, angle_rad: f32) -> bool {
@@ -357,15 +503,24 @@ fn nonnegative(value: f32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rip_robot_domain::TimestampUs;
 
     fn state(theta: f32, theta_dot: f32) -> EstimatedState {
         state_with_arm(theta, theta_dot, 0.0, 0.0)
     }
 
     fn state_with_arm(theta: f32, theta_dot: f32, phi: f32, phi_dot: f32) -> EstimatedState {
+        state_with_arm_at(1_000, theta, theta_dot, phi, phi_dot)
+    }
+
+    fn state_with_arm_at(
+        timestamp_us: u64,
+        theta: f32,
+        theta_dot: f32,
+        phi: f32,
+        phi_dot: f32,
+    ) -> EstimatedState {
         EstimatedState {
-            timestamp: TimestampUs(1_000),
+            timestamp: TimestampUs(timestamp_us),
             theta: AngleRad(theta),
             theta_dot: AngularRateRadPerSec(theta_dot),
             phi: AngleRad(phi),
@@ -501,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn balance_restores_full_arm_state_feedback() {
+    fn balance_restores_full_arm_state_feedback_when_reference_handoff_is_disabled() {
         let gains = [0.2, 0.02, 0.01, 0.01];
         let balance = LqrController::new(gains).unwrap();
         let mut hybrid = HybridController::new(swing(), balance, policy());
@@ -522,6 +677,75 @@ mod tests {
         let actual = hybrid.compute(&balance_state).unwrap();
         assert_eq!(hybrid.regime(), ControlRegime::Balance);
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn balance_reference_handoff_starts_with_zero_arm_error_and_decays_rate_reference() {
+        let gains = [0.2, 0.02, 0.01, 0.01];
+        let balance = LqrController::new(gains).unwrap();
+        let reference_config = BalanceReferenceConfig::new(1.0).unwrap();
+        let mut hybrid = HybridController::new_with_balance_reference(
+            swing(),
+            balance,
+            policy(),
+            reference_config,
+        );
+
+        hybrid
+            .compute(&state_with_arm_at(1_000, 0.30, 0.5, 10.0, -20.0))
+            .unwrap();
+        hybrid
+            .compute(&state_with_arm_at(2_000, 0.10, 0.4, 10.0, -20.0))
+            .unwrap();
+        hybrid
+            .compute(&state_with_arm_at(3_000, 0.10, 0.4, 10.0, -20.0))
+            .unwrap();
+        let entry = hybrid
+            .compute(&state_with_arm_at(4_000, 0.10, 0.4, 10.0, -20.0))
+            .unwrap();
+        assert_eq!(hybrid.regime(), ControlRegime::Balance);
+        assert!((entry.arm_torque.0 - -0.028).abs() < 1.0e-6);
+
+        let latched = hybrid.balance_reference().unwrap();
+        assert_eq!(latched.phi_ref, AngleRad(10.0));
+        assert_eq!(latched.phi_dot_ref, AngularRateRadPerSec(-20.0));
+
+        let _ = hybrid
+            .compute(&state_with_arm_at(104_000, 0.10, 0.4, 10.0, -20.0))
+            .unwrap();
+        let advanced = hybrid.balance_reference().unwrap();
+        assert!(advanced.phi_ref.0 < latched.phi_ref.0);
+        assert!(advanced.phi_dot_ref.0.abs() < latched.phi_dot_ref.0.abs());
+        assert_eq!(advanced.updated_at, TimestampUs(104_000));
+    }
+
+    #[test]
+    fn balance_reference_is_cleared_when_balance_falls_back_to_capture() {
+        let gains = [0.2, 0.02, 0.01, 0.01];
+        let balance = LqrController::new(gains).unwrap();
+        let mut hybrid = HybridController::new_with_balance_reference(
+            swing(),
+            balance,
+            policy(),
+            BalanceReferenceConfig::new(1.0).unwrap(),
+        );
+
+        hybrid
+            .compute(&state_with_arm_at(1_000, 0.30, 0.5, 3.0, -4.0))
+            .unwrap();
+        for timestamp in [2_000, 3_000, 4_000] {
+            hybrid
+                .compute(&state_with_arm_at(timestamp, 0.10, 0.4, 3.0, -4.0))
+                .unwrap();
+        }
+        assert_eq!(hybrid.regime(), ControlRegime::Balance);
+        assert!(hybrid.balance_reference().is_some());
+
+        hybrid
+            .compute(&state_with_arm_at(5_000, 0.25, 0.5, 3.0, -4.0))
+            .unwrap();
+        assert_eq!(hybrid.regime(), ControlRegime::Capture);
+        assert!(hybrid.balance_reference().is_none());
     }
 
     #[test]
