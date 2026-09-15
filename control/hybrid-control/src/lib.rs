@@ -2,7 +2,9 @@
 #![forbid(unsafe_code)]
 
 use libm::cosf;
-use rip_robot_domain::{EstimatedState, GeneralizedDemand, StateValidity, TorqueNm};
+use rip_robot_domain::{
+    AngleRad, AngularRateRadPerSec, EstimatedState, GeneralizedDemand, StateValidity, TorqueNm,
+};
 use rip_state_feedback::{Controller, LqrController, LqrError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -309,14 +311,30 @@ impl Controller for HybridController {
                 .swing_up
                 .compute(state)
                 .map_err(HybridControlError::SwingUp),
-            // Capture is a catch phase, not an EBC/LQR blend. Once the angle
-            // boundary is crossed, the bounded downstream runtime owns limiting
-            // while the stabilizing state-feedback law owns the demand.
-            ControlRegime::Capture | ControlRegime::Balance => self
+            ControlRegime::Capture => {
+                // Capture is deliberately pendulum-priority. The same feedback
+                // gains are reused, but arm-position and arm-rate coordinates are
+                // projected out until the pendulum is slow enough to qualify for
+                // Balance. This prevents EBC-created arm state from overriding
+                // the theta/theta_dot catch demand.
+                let projected = pendulum_capture_projection(state);
+                self.balance
+                    .compute(&projected)
+                    .map_err(HybridControlError::Balance)
+            }
+            ControlRegime::Balance => self
                 .balance
                 .compute(state)
                 .map_err(HybridControlError::Balance),
         }
+    }
+}
+
+fn pendulum_capture_projection(state: &EstimatedState) -> EstimatedState {
+    EstimatedState {
+        phi: AngleRad(0.0),
+        phi_dot: AngularRateRadPerSec(0.0),
+        ..*state
     }
 }
 
@@ -339,15 +357,19 @@ fn nonnegative(value: f32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rip_robot_domain::{AngleRad, AngularRateRadPerSec, TimestampUs};
+    use rip_robot_domain::TimestampUs;
 
     fn state(theta: f32, theta_dot: f32) -> EstimatedState {
+        state_with_arm(theta, theta_dot, 0.0, 0.0)
+    }
+
+    fn state_with_arm(theta: f32, theta_dot: f32, phi: f32, phi_dot: f32) -> EstimatedState {
         EstimatedState {
             timestamp: TimestampUs(1_000),
             theta: AngleRad(theta),
             theta_dot: AngularRateRadPerSec(theta_dot),
-            phi: AngleRad(0.0),
-            phi_dot: AngularRateRadPerSec(0.0),
+            phi: AngleRad(phi),
+            phi_dot: AngularRateRadPerSec(phi_dot),
             validity: StateValidity::Valid,
         }
     }
@@ -464,16 +486,41 @@ mod tests {
     }
 
     #[test]
-    fn capture_hands_demand_directly_to_state_feedback() {
+    fn capture_projects_out_arm_state_before_state_feedback() {
         let gains = [0.2, 0.02, 0.01, 0.01];
-        let capture_state = state(0.30, 20.0);
+        let capture_state = state_with_arm(0.30, 20.0, 5.0, -7.0);
+        let projected_state = state(0.30, 20.0);
         let mut expected_controller = LqrController::new(gains).unwrap();
-        let expected = expected_controller.compute(&capture_state).unwrap();
+        let expected = expected_controller.compute(&projected_state).unwrap();
         let balance = LqrController::new(gains).unwrap();
         let mut hybrid = HybridController::new(swing(), balance, policy());
 
         let actual = hybrid.compute(&capture_state).unwrap();
         assert_eq!(hybrid.regime(), ControlRegime::Capture);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn balance_restores_full_arm_state_feedback() {
+        let gains = [0.2, 0.02, 0.01, 0.01];
+        let balance = LqrController::new(gains).unwrap();
+        let mut hybrid = HybridController::new(swing(), balance, policy());
+
+        hybrid
+            .compute(&state_with_arm(0.30, 0.5, 5.0, -7.0))
+            .unwrap();
+        for _ in 0..3 {
+            hybrid
+                .compute(&state_with_arm(0.10, 0.4, 5.0, -7.0))
+                .unwrap();
+        }
+        assert_eq!(hybrid.regime(), ControlRegime::Balance);
+
+        let balance_state = state_with_arm(0.05, 0.2, 1.0, -2.0);
+        let mut expected_controller = LqrController::new(gains).unwrap();
+        let expected = expected_controller.compute(&balance_state).unwrap();
+        let actual = hybrid.compute(&balance_state).unwrap();
+        assert_eq!(hybrid.regime(), ControlRegime::Balance);
         assert_eq!(actual, expected);
     }
 
