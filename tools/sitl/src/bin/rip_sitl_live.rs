@@ -3,12 +3,12 @@ use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+use rip_sitl::scheduler::EventKind;
+use rip_sitl::virtual_time::VirtualTime;
 use rip_sitl::{
     rotary::BalanceControllerProfile, ReferenceAssemblyParameters, RotarySitlSystem, Scenario,
     SitlSystem,
 };
-use rip_sitl::scheduler::EventKind;
-use rip_sitl::virtual_time::VirtualTime;
 use serde_json::{json, Map, Value};
 
 const DEFAULT_PARAMETER_PATH: &str = "parameters/reference-assembly.json";
@@ -250,21 +250,40 @@ fn hybrid_diagnostics(
     let u_theta_dot = -(gains[1] as f64 * theta_dot);
     let u_phi = -(gains[2] as f64 * phi);
     let u_phi_dot = -(gains[3] as f64 * phi_dot);
-    let balance_torque = u_theta + u_theta_dot + u_phi + u_phi_dot;
+    let capture_torque = u_theta + u_theta_dot;
+    let full_state_balance_torque = capture_torque + u_phi + u_phi_dot;
 
     let capture_angle_eligible = theta.abs() <= CAPTURE_ENTER_ANGLE_RAD;
     let legacy_capture_rate_eligible = theta_dot.abs() <= LEGACY_CAPTURE_ENTER_RATE_RAD_S;
     let balance_eligible = theta.abs() <= BALANCE_ENTER_ANGLE_RAD
         && theta_dot.abs() <= BALANCE_ENTER_RATE_RAD_S;
     let state_feedback_active = matches!(regime, "capture" | "balance");
+    let capture_projection_active = regime == "capture";
 
-    // Keep the old blend-named fields for the existing console logger, but the
-    // value is now deliberately binary: Capture/Balance are 100% state feedback.
+    let (active_u_phi, active_u_phi_dot, active_feedback_torque, active_controller) = match regime {
+        "capture" => (0.0, 0.0, capture_torque, "capture_pendulum_subspace"),
+        "balance" => (
+            u_phi,
+            u_phi_dot,
+            full_state_balance_torque,
+            "full_state_feedback",
+        ),
+        _ => (
+            u_phi,
+            u_phi_dot,
+            full_state_balance_torque,
+            "swing_up",
+        ),
+    };
+
+    // Keep the old blend-named fields for the existing console logger. Their
+    // value is now a selected-controller mirror: SwingUp uses EBC, Capture uses
+    // the theta/theta_dot projection, and Balance uses full-state feedback.
     let capture_blend_weight = if state_feedback_active { 1.0 } else { 0.0 };
-    let capture_blended_torque = if state_feedback_active {
-        balance_torque
-    } else {
-        swing_torque
+    let capture_blended_torque = match regime {
+        "capture" => capture_torque,
+        "balance" => full_state_balance_torque,
+        _ => swing_torque,
     };
 
     json!({
@@ -272,14 +291,23 @@ fn hybrid_diagnostics(
         "target_energy_j": target_energy,
         "energy_error_j": energy_error,
         "swing_torque_nm": swing_torque,
-        "balance_torque_nm": balance_torque,
+        "capture_torque_nm": capture_torque,
+        "balance_torque_nm": full_state_balance_torque,
         "state_feedback_terms_nm": {
+            "theta": u_theta,
+            "theta_dot": u_theta_dot,
+            "phi": active_u_phi,
+            "phi_dot": active_u_phi_dot,
+            "sum": active_feedback_torque
+        },
+        "full_state_shadow_terms_nm": {
             "theta": u_theta,
             "theta_dot": u_theta_dot,
             "phi": u_phi,
             "phi_dot": u_phi_dot,
-            "sum": balance_torque
+            "sum": full_state_balance_torque
         },
+        "capture_projection_active": capture_projection_active,
         "capture_blend_weight": capture_blend_weight,
         "capture_blended_torque_nm": capture_blended_torque,
         "capture_angle_eligible": capture_angle_eligible,
@@ -287,7 +315,7 @@ fn hybrid_diagnostics(
         "legacy_capture_rate_eligible": legacy_capture_rate_eligible,
         "capture_eligible": capture_angle_eligible,
         "balance_eligible": balance_eligible,
-        "active_controller": if state_feedback_active { "state_feedback" } else { "swing_up" }
+        "active_controller": active_controller
     })
 }
 
