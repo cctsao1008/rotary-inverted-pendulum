@@ -83,7 +83,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 "backend": "persistent production Rust SITL semantic path",
                 "scenario": scenario.id,
                 "balance_controller": cli.balance_controller.as_str(),
-                "scope": "simulation evidence only; persistent incremental run; Balance may use an explicit moving arm reference; diagnostic branch-torque recomputation is explanatory only; no physical actuator authority"
+                "scope": "simulation evidence only; persistent incremental run; Balance may use moving-reference spin-down and nearest-branch recenter; diagnostic branch-torque recomputation is explanatory only; no physical actuator authority"
             }
         })
     )?;
@@ -172,9 +172,8 @@ fn viewer_sample(
         .get("control_regime")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
-    let balance_reference = merged
-        .get("balance_reference")
-        .and_then(Value::as_object)
+    let balance_reference_object = merged.get("balance_reference").and_then(Value::as_object);
+    let balance_reference = balance_reference_object
         .map(|reference| {
             Ok::<(f64, f64), Box<dyn Error>>((
                 number(reference, "phi_ref_rad")?,
@@ -182,6 +181,12 @@ fn viewer_sample(
             ))
         })
         .transpose()?;
+    let balance_reference_phase = balance_reference_object
+        .and_then(|reference| reference.get("phase"))
+        .and_then(Value::as_str);
+    let balance_recenter_target = balance_reference_object
+        .and_then(|reference| reference.get("recenter_target_phi_rad"))
+        .and_then(Value::as_f64);
 
     let mut sample = Map::new();
     sample.insert("t_s".into(), json!(at.as_micros() as f64 * 1.0e-6));
@@ -222,6 +227,8 @@ fn viewer_sample(
                 phi,
                 phi_dot,
                 balance_reference,
+                balance_reference_phase,
+                balance_recenter_target,
                 regime,
                 parameters,
                 balance_controller,
@@ -238,6 +245,8 @@ fn hybrid_diagnostics(
     phi: f64,
     phi_dot: f64,
     balance_reference: Option<(f64, f64)>,
+    balance_reference_phase: Option<&str>,
+    balance_recenter_target: Option<f64>,
     regime: &str,
     parameters: &ReferenceAssemblyParameters,
     balance_controller: BalanceControllerProfile,
@@ -285,13 +294,19 @@ fn hybrid_diagnostics(
     let state_feedback_active = matches!(regime, "capture" | "balance");
     let capture_projection_active = regime == "capture";
 
+    let balance_controller_label = match balance_reference_phase {
+        Some("spin_down") => "balance_reference_spin_down",
+        Some("recenter") => "balance_reference_recenter",
+        Some("hold") => "balance_reference_hold",
+        _ => "balance_reference_tracking",
+    };
     let (active_u_phi, active_u_phi_dot, active_feedback_torque, active_controller) = match regime {
         "capture" => (0.0, 0.0, capture_torque, "capture_pendulum_subspace"),
         "balance" => (
             tracking_u_phi,
             tracking_u_phi_dot,
             tracking_balance_torque,
-            "balance_reference_tracking",
+            balance_controller_label,
         ),
         _ => (
             global_u_phi,
@@ -344,7 +359,9 @@ fn hybrid_diagnostics(
             "phi_ref_rad": phi_ref,
             "phi_dot_ref_rad_s": phi_dot_ref,
             "phi_error_rad": phi_error,
-            "phi_dot_error_rad_s": phi_dot_error
+            "phi_dot_error_rad_s": phi_dot_error,
+            "phase": balance_reference_phase,
+            "recenter_target_phi_rad": balance_recenter_target
         })),
         "capture_projection_active": capture_projection_active,
         "capture_blend_weight": capture_blend_weight,
