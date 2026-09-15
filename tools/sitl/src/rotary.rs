@@ -12,8 +12,8 @@ use rip_control_runtime::{
 };
 use rip_estimator_input_adapter::EstimatorInputAdapter;
 use rip_hybrid_control::{
-    CapturePolicy, CapturePolicyConfig, ControlRegime, EnergySwingUpConfig,
-    EnergySwingUpController, HybridController,
+    BalanceReferenceConfig, BalanceReferenceState, CapturePolicy, CapturePolicyConfig,
+    ControlRegime, EnergySwingUpConfig, EnergySwingUpController, HybridController,
 };
 use rip_measurement_model::{EncoderScale, PendulumCalibration};
 use rip_plant_model::{FurutaParameters, FurutaPlant, FurutaState};
@@ -57,6 +57,10 @@ const BALANCE_EXIT_RATE_RAD_S: f32 = 2.0;
 const CAPTURE_EXIT_ANGLE_RAD: f32 = 30.0 * PI / 180.0;
 const CAPTURE_EXIT_RATE_RAD_S: f32 = 4.0;
 const CAPTURE_SETTLE_CYCLES: u16 = 20;
+
+// #67 first simulation experiment only. This shapes controller-reference
+// motion; it is not a Forest D1 specimen constant or physical-authority claim.
+const BALANCE_ARM_RATE_REFERENCE_TAU_S: f32 = 1.0;
 
 const SIMULATION_MAX_ABS_COMMAND: f32 = 1.0;
 
@@ -503,6 +507,7 @@ impl RotarySitlSystem {
         self.watchdog.kick(at.as_micros());
 
         let new_regime = self.runtime.controller().regime();
+        let balance_reference = self.runtime.controller().balance_reference();
         if new_regime != self.last_regime {
             self.metrics.regime_transitions = self.metrics.regime_transitions.saturating_add(1);
             if new_regime == ControlRegime::Capture && self.metrics.first_capture_us.is_none() {
@@ -571,6 +576,7 @@ impl RotarySitlSystem {
                     "runtime_cycle": "computed",
                     "control_regime": regime_name(new_regime),
                     "estimated_state": estimated_state_json(state),
+                    "balance_reference": balance_reference.map(balance_reference_json),
                     "generalized_demand": {
                         "arm_torque_nm": demand.arm_torque.0
                     },
@@ -688,6 +694,7 @@ impl SitlSystem for RotarySitlSystem {
         let actuator = *self.actuator_state.borrow();
         json!({
             "balance_controller_profile": self.balance_controller_profile.as_str(),
+            "balance_arm_rate_reference_tau_s": BALANCE_ARM_RATE_REFERENCE_TAU_S,
             "computed_cycles": self.metrics.computed_cycles,
             "authorized_cycles": self.metrics.authorized_cycles,
             "denied_cycles": self.metrics.denied_cycles,
@@ -699,6 +706,7 @@ impl SitlSystem for RotarySitlSystem {
             "max_abs_phi_rad": self.metrics.max_abs_phi_rad,
             "max_abs_torque_nm": self.metrics.max_abs_torque_nm,
             "final_state": state_json(final_state),
+            "balance_reference": self.runtime.controller().balance_reference().map(balance_reference_json),
             "final_tb6612_frame": {
                 "mode": bridge_mode_name(actuator.frame.mode()),
                 "duty_fraction": actuator.frame.duty_fraction()
@@ -751,7 +759,14 @@ fn hybrid_controller(
         settle_cycles: CAPTURE_SETTLE_CYCLES,
     })
     .map_err(|error| boxed(format!("capture setup: {error:?}")))?;
-    Ok(HybridController::new(swing, balance, capture))
+    let balance_reference = BalanceReferenceConfig::new(BALANCE_ARM_RATE_REFERENCE_TAU_S)
+        .ok_or_else(|| boxed("invalid Balance arm-rate reference decay constant"))?;
+    Ok(HybridController::new_with_balance_reference(
+        swing,
+        balance,
+        capture,
+        balance_reference,
+    ))
 }
 
 fn state_json(state: FurutaState) -> Value {
@@ -771,6 +786,14 @@ fn estimated_state_json(state: EstimatedState) -> Value {
         "phi_dot_rad_s": state.phi_dot.0,
         "captured_at_us": state.timestamp.0,
         "validity": format!("{:?}", state.validity)
+    })
+}
+
+fn balance_reference_json(reference: BalanceReferenceState) -> Value {
+    json!({
+        "phi_ref_rad": reference.phi_ref.0,
+        "phi_dot_ref_rad_s": reference.phi_dot_ref.0,
+        "updated_at_us": reference.updated_at.0
     })
 }
 
@@ -880,6 +903,10 @@ mod tests {
             assert_eq!(
                 summary["system"]["balance_controller_profile"],
                 profile.as_str()
+            );
+            assert_eq!(
+                summary["system"]["balance_arm_rate_reference_tau_s"],
+                BALANCE_ARM_RATE_REFERENCE_TAU_S
             );
             assert!(summary["system"]["computed_cycles"].as_u64().unwrap() > 0);
             assert!(summary["system"]["authorized_cycles"].as_u64().unwrap() > 0);
