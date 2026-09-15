@@ -123,7 +123,20 @@ def log_capture_diagnostics(
             )
         else:
             term_text = ""
+
+        reference = diagnostics.get("balance_reference")
+        if isinstance(reference, dict):
+            reference_text = (
+                f"φref={float(reference.get('phi_ref_rad', float('nan'))): .3f}rad "
+                f"φdref={float(reference.get('phi_dot_ref_rad_s', float('nan'))): .3f}rad/s "
+                f"φe={float(reference.get('phi_error_rad', float('nan'))): .3f}rad "
+                f"φde={float(reference.get('phi_dot_error_rad_s', float('nan'))): .3f}rad/s "
+            )
+        else:
+            reference_text = ""
+
         active_controller = diagnostics.get("active_controller", "unknown")
+        global_zero_shadow = float(diagnostics.get("global_zero_shadow_torque_nm", float("nan")))
         print(
             "[capture] "
             f"t={t_s:8.4f}s regime={str(regime):7s} "
@@ -133,8 +146,10 @@ def log_capture_diagnostics(
             f"{float(diagnostics['target_energy_j']):.5f}J "
             f"swing={float(diagnostics['swing_torque_nm']): .5f}Nm "
             f"capture={float(diagnostics.get('capture_torque_nm', float('nan'))): .5f}Nm "
-            f"full={float(diagnostics['balance_torque_nm']): .5f}Nm "
+            f"track={float(diagnostics['balance_torque_nm']): .5f}Nm "
+            f"global0={global_zero_shadow: .5f}Nm "
             f"{term_text}"
+            f"{reference_text}"
             f"selected={float(diagnostics['capture_blended_torque_nm']): .5f}Nm "
             f"req={float(requested) if requested is not None else float('nan'): .5f}Nm "
             f"applied={float(applied) if applied is not None else float('nan'): .5f}Nm "
