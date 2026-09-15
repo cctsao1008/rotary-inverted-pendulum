@@ -86,6 +86,52 @@ def stop_process(process: subprocess.Popen[str] | None) -> None:
         process.wait(timeout=1.0)
 
 
+def log_capture_diagnostics(
+    sample: dict,
+    previous_regime: str | None,
+    last_log_t: float | None,
+) -> tuple[str | None, float | None]:
+    """Print sparse explanatory diagnostics around upright/capture crossings.
+
+    The values are emitted by rip-sitl-live. This function only formats them;
+    it does not recompute control or change the live stream.
+    """
+    regime = sample.get("control_regime")
+    diagnostics = sample.get("hybrid_diagnostics")
+    estimated = sample.get("estimated_state")
+    if not isinstance(diagnostics, dict) or not isinstance(estimated, list) or len(estimated) != 4:
+        return regime or previous_regime, last_log_t
+
+    t_s = float(sample.get("t_s", 0.0))
+    theta = float(estimated[0])
+    theta_dot = float(estimated[1])
+    near_upright = abs(theta) <= math.radians(25.0)
+    eligible = bool(diagnostics.get("capture_eligible", False))
+    regime_changed = previous_regime is not None and regime != previous_regime
+    periodic_near = near_upright and (last_log_t is None or t_s - last_log_t >= 0.050)
+
+    if regime_changed or eligible or periodic_near:
+        requested = sample.get("requested_arm_torque_nm")
+        applied = sample.get("applied_arm_torque_nm")
+        print(
+            "[capture] "
+            f"t={t_s:8.4f}s regime={str(regime):7s} "
+            f"theta={math.degrees(theta):8.3f}deg theta_dot={theta_dot:8.3f}rad/s "
+            f"E={float(diagnostics['pendulum_energy_j']):.5f}/"
+            f"{float(diagnostics['target_energy_j']):.5f}J "
+            f"swing={float(diagnostics['swing_torque_nm']): .5f}Nm "
+            f"lqr={float(diagnostics['balance_torque_nm']): .5f}Nm "
+            f"blend={float(diagnostics['capture_blend_weight']):.3f} "
+            f"mix={float(diagnostics['capture_blended_torque_nm']): .5f}Nm "
+            f"req={float(requested) if requested is not None else float('nan'): .5f}Nm "
+            f"applied={float(applied) if applied is not None else float('nan'): .5f}Nm "
+            f"eligible={eligible}"
+        )
+        last_log_t = t_s
+
+    return regime or previous_regime, last_log_t
+
+
 class Handler(SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -192,6 +238,8 @@ class Handler(SimpleHTTPRequestHandler):
             wall_anchor: float | None = None
             sim_anchor: float | None = None
             display_period = 1.0 / fps
+            previous_regime: str | None = None
+            last_diag_log_t: float | None = None
 
             for raw in process.stdout:
                 line = raw.strip()
@@ -224,6 +272,11 @@ class Handler(SimpleHTTPRequestHandler):
                     raise RuntimeError("rip-sitl-live emitted a sample before metadata")
 
                 sample = message["sample"]
+                if scenario_key == "swingup":
+                    previous_regime, last_diag_log_t = log_capture_diagnostics(
+                        sample, previous_regime, last_diag_log_t
+                    )
+
                 t_s = float(sample["t_s"])
                 if next_display_t is None:
                     next_display_t = t_s
