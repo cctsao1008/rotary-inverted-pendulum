@@ -229,6 +229,14 @@ function renderFrame() {
   document.querySelector('#torque').textContent = torqueText(sample.arm_torque_nm ?? 0);
   document.querySelector('#requested-torque').textContent = torqueText(sample.requested_arm_torque_nm);
   document.querySelector('#applied-torque').textContent = torqueText(sample.applied_arm_torque_nm);
+
+  const terms = sample.hybrid_diagnostics?.state_feedback_terms_nm;
+  document.querySelector('#u-theta').textContent = torqueText(terms?.theta);
+  document.querySelector('#u-theta-dot').textContent = torqueText(terms?.theta_dot);
+  document.querySelector('#u-phi').textContent = torqueText(terms?.phi);
+  document.querySelector('#u-phi-dot').textContent = torqueText(terms?.phi_dot);
+  document.querySelector('#u-state-feedback-sum').textContent = torqueText(terms?.sum);
+
   document.querySelector('#regime').textContent = sample.control_regime ?? '—';
   document.querySelector('#runtime-state').textContent = sample.runtime_state ?? '—';
   document.querySelector('#authority').textContent = sample.authority ?? '—';
