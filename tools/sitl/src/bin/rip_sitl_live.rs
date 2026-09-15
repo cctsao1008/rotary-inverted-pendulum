@@ -13,6 +13,18 @@ use serde_json::{json, Map, Value};
 
 const DEFAULT_PARAMETER_PATH: &str = "parameters/reference-assembly.json";
 
+// Diagnostic mirrors of the current hybrid-control capture envelope. These are
+// emitted only to explain an already-computed control decision; they do not
+// participate in controller execution or actuator authority.
+const ENERGY_TORQUE_GAIN: f64 = 0.175;
+const MAX_ABS_TORQUE_NM: f64 = 0.05;
+const SWING_KICK_TORQUE_NM: f64 = 0.01;
+const SWING_KICK_BELOW_RATE_RAD_S: f64 = 0.05;
+const CAPTURE_ENTER_ANGLE_RAD: f64 = 20.0_f64.to_radians();
+const CAPTURE_ENTER_RATE_RAD_S: f64 = 3.0;
+const BALANCE_ENTER_ANGLE_RAD: f64 = 8.0_f64.to_radians();
+const BALANCE_ENTER_RATE_RAD_S: f64 = 1.0;
+
 #[derive(Debug)]
 struct Cli {
     scenario: PathBuf,
@@ -71,7 +83,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 "backend": "persistent production Rust SITL semantic path",
                 "scenario": scenario.id,
                 "balance_controller": cli.balance_controller.as_str(),
-                "scope": "simulation evidence only; persistent incremental run; no physical actuator authority"
+                "scope": "simulation evidence only; persistent incremental run; diagnostic branch-torque recomputation is explanatory only; no physical actuator authority"
             }
         })
     )?;
@@ -99,7 +111,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         merge_payload(&mut merged, system.on_event(EventKind::ProductionRuntime, at)?);
         merge_payload(&mut merged, system.on_event(EventKind::ActuationCommit, at)?);
 
-        let sample = viewer_sample(at, &merged)?;
+        let sample = viewer_sample(
+            at,
+            &merged,
+            &parameters,
+            cli.balance_controller,
+        )?;
         writeln!(out, "{}", json!({"type": "sample", "sample": sample}))?;
         out.flush()?;
 
@@ -122,7 +139,12 @@ fn merge_payload(target: &mut Map<String, Value>, payload: Option<Value>) {
     }
 }
 
-fn viewer_sample(at: VirtualTime, merged: &Map<String, Value>) -> Result<Value, Box<dyn Error>> {
+fn viewer_sample(
+    at: VirtualTime,
+    merged: &Map<String, Value>,
+    parameters: &ReferenceAssemblyParameters,
+    balance_controller: BalanceControllerProfile,
+) -> Result<Value, Box<dyn Error>> {
     let state = merged
         .get("true_plant_state")
         .and_then(Value::as_object)
@@ -170,18 +192,103 @@ fn viewer_sample(at: VirtualTime, merged: &Map<String, Value>) -> Result<Value, 
         sample.insert("runtime_state".into(), json!(value));
     }
     if let Some(estimated) = merged.get("estimated_state").and_then(Value::as_object) {
+        let theta = number(estimated, "theta_rad")?;
+        let theta_dot = number(estimated, "theta_dot_rad_s")?;
+        let phi = number(estimated, "phi_rad")?;
+        let phi_dot = number(estimated, "phi_dot_rad_s")?;
         sample.insert(
             "estimated_state".into(),
-            json!([
-                number(estimated, "theta_rad")?,
-                number(estimated, "theta_dot_rad_s")?,
-                number(estimated, "phi_rad")?,
-                number(estimated, "phi_dot_rad_s")?
-            ]),
+            json!([theta, theta_dot, phi, phi_dot]),
+        );
+        sample.insert(
+            "hybrid_diagnostics".into(),
+            hybrid_diagnostics(
+                theta,
+                theta_dot,
+                phi,
+                phi_dot,
+                parameters,
+                balance_controller,
+            ),
         );
     }
 
     Ok(Value::Object(sample))
+}
+
+fn hybrid_diagnostics(
+    theta: f64,
+    theta_dot: f64,
+    phi: f64,
+    phi_dot: f64,
+    parameters: &ReferenceAssemblyParameters,
+    balance_controller: BalanceControllerProfile,
+) -> Value {
+    let m = parameters.plant.pendulum_mass_kg.value as f64;
+    let l = parameters.plant.pendulum_com_length_m.value as f64;
+    let j = parameters.plant.pendulum_inertia_kg_m2.value as f64;
+    let g = parameters.plant.gravity_m_s2.value as f64;
+    let target_energy = 2.0 * m * g * l;
+    let energy = m * g * l * (1.0 + theta.cos()) + 0.5 * j * theta_dot * theta_dot;
+    let energy_error = target_energy - energy;
+    let mut swing_torque = ENERGY_TORQUE_GAIN * energy_error * theta_dot * (-theta.cos());
+    if energy_error > 0.0
+        && theta_dot.abs() <= SWING_KICK_BELOW_RATE_RAD_S
+        && swing_torque.abs() < SWING_KICK_TORQUE_NM
+    {
+        swing_torque = if theta < 0.0 {
+            -SWING_KICK_TORQUE_NM
+        } else {
+            SWING_KICK_TORQUE_NM
+        };
+    }
+    swing_torque = swing_torque.clamp(-MAX_ABS_TORQUE_NM, MAX_ABS_TORQUE_NM);
+
+    let gains = balance_controller.gains();
+    let balance_torque = -(
+        gains[0] as f64 * theta
+            + gains[1] as f64 * theta_dot
+            + gains[2] as f64 * phi
+            + gains[3] as f64 * phi_dot
+    );
+
+    let angle_weight = proximity_weight(
+        theta.abs(),
+        BALANCE_ENTER_ANGLE_RAD,
+        CAPTURE_ENTER_ANGLE_RAD,
+    );
+    let rate_weight = proximity_weight(
+        theta_dot.abs(),
+        BALANCE_ENTER_RATE_RAD_S,
+        CAPTURE_ENTER_RATE_RAD_S,
+    );
+    let capture_blend_weight = angle_weight.min(rate_weight);
+    let capture_blended_torque =
+        swing_torque * (1.0 - capture_blend_weight) + balance_torque * capture_blend_weight;
+
+    json!({
+        "pendulum_energy_j": energy,
+        "target_energy_j": target_energy,
+        "energy_error_j": energy_error,
+        "swing_torque_nm": swing_torque,
+        "balance_torque_nm": balance_torque,
+        "capture_blend_weight": capture_blend_weight,
+        "capture_blended_torque_nm": capture_blended_torque,
+        "capture_angle_eligible": theta.abs() <= CAPTURE_ENTER_ANGLE_RAD,
+        "capture_rate_eligible": theta_dot.abs() <= CAPTURE_ENTER_RATE_RAD_S,
+        "capture_eligible": theta.abs() <= CAPTURE_ENTER_ANGLE_RAD
+            && theta_dot.abs() <= CAPTURE_ENTER_RATE_RAD_S
+    })
+}
+
+fn proximity_weight(value: f64, inner: f64, outer: f64) -> f64 {
+    if value <= inner {
+        1.0
+    } else if value >= outer {
+        0.0
+    } else {
+        1.0 - (value - inner) / (outer - inner)
+    }
 }
 
 fn number(object: &Map<String, Value>, key: &str) -> Result<f64, Box<dyn Error>> {
@@ -209,7 +316,7 @@ fn parse_cli() -> Result<Cli, String> {
             "--parameters" => {
                 parameters = Some(PathBuf::from(
                     args.next()
-                        .ok_or_else(|| "--parameters requires a path".to_string())?,
+                        .ok_or_else(|| "--parameters requires a value".to_string())?,
                 ));
             }
             "--balance-controller" => {
