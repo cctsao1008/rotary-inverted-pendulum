@@ -21,7 +21,7 @@ const MAX_ABS_TORQUE_NM: f64 = 0.05;
 const SWING_KICK_TORQUE_NM: f64 = 0.01;
 const SWING_KICK_BELOW_RATE_RAD_S: f64 = 0.05;
 const CAPTURE_ENTER_ANGLE_RAD: f64 = 20.0_f64.to_radians();
-const CAPTURE_ENTER_RATE_RAD_S: f64 = 3.0;
+const LEGACY_CAPTURE_ENTER_RATE_RAD_S: f64 = 3.0;
 const BALANCE_ENTER_ANGLE_RAD: f64 = 8.0_f64.to_radians();
 const BALANCE_ENTER_RATE_RAD_S: f64 = 1.0;
 
@@ -111,12 +111,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         merge_payload(&mut merged, system.on_event(EventKind::ProductionRuntime, at)?);
         merge_payload(&mut merged, system.on_event(EventKind::ActuationCommit, at)?);
 
-        let sample = viewer_sample(
-            at,
-            &merged,
-            &parameters,
-            cli.balance_controller,
-        )?;
+        let sample = viewer_sample(at, &merged, &parameters, cli.balance_controller)?;
         writeln!(out, "{}", json!({"type": "sample", "sample": sample}))?;
         out.flush()?;
 
@@ -173,6 +168,10 @@ fn viewer_sample(
         .and_then(Value::as_object)
         .and_then(|value| value.get("runtime_state"))
         .and_then(Value::as_str);
+    let regime = merged
+        .get("control_regime")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
 
     let mut sample = Map::new();
     sample.insert("t_s".into(), json!(at.as_micros() as f64 * 1.0e-6));
@@ -182,8 +181,8 @@ fn viewer_sample(
     if let Some(value) = requested {
         sample.insert("requested_arm_torque_nm".into(), json!(value));
     }
-    if let Some(value) = merged.get("control_regime").and_then(Value::as_str) {
-        sample.insert("control_regime".into(), json!(value));
+    if regime != "unknown" {
+        sample.insert("control_regime".into(), json!(regime));
     }
     if let Some(value) = merged.get("authority").and_then(Value::as_str) {
         sample.insert("authority".into(), json!(value));
@@ -207,6 +206,7 @@ fn viewer_sample(
                 theta_dot,
                 phi,
                 phi_dot,
+                regime,
                 parameters,
                 balance_controller,
             ),
@@ -221,6 +221,7 @@ fn hybrid_diagnostics(
     theta_dot: f64,
     phi: f64,
     phi_dot: f64,
+    regime: &str,
     parameters: &ReferenceAssemblyParameters,
     balance_controller: BalanceControllerProfile,
 ) -> Value {
@@ -252,19 +253,20 @@ fn hybrid_diagnostics(
             + gains[3] as f64 * phi_dot
     );
 
-    let angle_weight = proximity_weight(
-        theta.abs(),
-        BALANCE_ENTER_ANGLE_RAD,
-        CAPTURE_ENTER_ANGLE_RAD,
-    );
-    let rate_weight = proximity_weight(
-        theta_dot.abs(),
-        BALANCE_ENTER_RATE_RAD_S,
-        CAPTURE_ENTER_RATE_RAD_S,
-    );
-    let capture_blend_weight = angle_weight.min(rate_weight);
-    let capture_blended_torque =
-        swing_torque * (1.0 - capture_blend_weight) + balance_torque * capture_blend_weight;
+    let capture_angle_eligible = theta.abs() <= CAPTURE_ENTER_ANGLE_RAD;
+    let legacy_capture_rate_eligible = theta_dot.abs() <= LEGACY_CAPTURE_ENTER_RATE_RAD_S;
+    let balance_eligible = theta.abs() <= BALANCE_ENTER_ANGLE_RAD
+        && theta_dot.abs() <= BALANCE_ENTER_RATE_RAD_S;
+    let state_feedback_active = matches!(regime, "capture" | "balance");
+
+    // Keep the old blend-named fields for the existing console logger, but the
+    // value is now deliberately binary: Capture/Balance are 100% state feedback.
+    let capture_blend_weight = if state_feedback_active { 1.0 } else { 0.0 };
+    let capture_blended_torque = if state_feedback_active {
+        balance_torque
+    } else {
+        swing_torque
+    };
 
     json!({
         "pendulum_energy_j": energy,
@@ -274,21 +276,13 @@ fn hybrid_diagnostics(
         "balance_torque_nm": balance_torque,
         "capture_blend_weight": capture_blend_weight,
         "capture_blended_torque_nm": capture_blended_torque,
-        "capture_angle_eligible": theta.abs() <= CAPTURE_ENTER_ANGLE_RAD,
-        "capture_rate_eligible": theta_dot.abs() <= CAPTURE_ENTER_RATE_RAD_S,
-        "capture_eligible": theta.abs() <= CAPTURE_ENTER_ANGLE_RAD
-            && theta_dot.abs() <= CAPTURE_ENTER_RATE_RAD_S
+        "capture_angle_eligible": capture_angle_eligible,
+        "capture_rate_eligible": legacy_capture_rate_eligible,
+        "legacy_capture_rate_eligible": legacy_capture_rate_eligible,
+        "capture_eligible": capture_angle_eligible,
+        "balance_eligible": balance_eligible,
+        "active_controller": if state_feedback_active { "state_feedback" } else { "swing_up" }
     })
-}
-
-fn proximity_weight(value: f64, inner: f64, outer: f64) -> f64 {
-    if value <= inner {
-        1.0
-    } else if value >= outer {
-        0.0
-    } else {
-        1.0 - (value - inner) / (outer - inner)
-    }
 }
 
 fn number(object: &Map<String, Value>, key: &str) -> Result<f64, Box<dyn Error>> {
