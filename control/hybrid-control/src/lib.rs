@@ -1,7 +1,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-use libm::{cosf, expf};
+use libm::{cosf, expf, roundf};
 use rip_robot_domain::{
     AngleRad, AngularRateRadPerSec, EstimatedState, GeneralizedDemand, StateValidity, TimestampUs,
     TorqueNm,
@@ -262,27 +262,108 @@ impl CapturePolicy {
     }
 }
 
+/// Optional recenter trajectory after the Balance handoff has removed most arm rate.
+///
+/// `commanded_orientation_rad` is an orientation modulo one revolution. The
+/// controller chooses the nearest equivalent unwrapped branch; canonical `phi`
+/// itself remains continuous/unwrapped physical history.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BalanceRecenterConfig {
+    commanded_orientation_rad: f32,
+    start_max_abs_arm_rate_rad_s: f32,
+    max_reference_rate_rad_s: f32,
+    position_time_constant_s: f32,
+}
+
+impl BalanceRecenterConfig {
+    pub fn new(
+        commanded_orientation_rad: f32,
+        start_max_abs_arm_rate_rad_s: f32,
+        max_reference_rate_rad_s: f32,
+        position_time_constant_s: f32,
+    ) -> Option<Self> {
+        if !commanded_orientation_rad.is_finite()
+            || !positive(start_max_abs_arm_rate_rad_s)
+            || !positive(max_reference_rate_rad_s)
+            || !positive(position_time_constant_s)
+        {
+            return None;
+        }
+        Some(Self {
+            commanded_orientation_rad,
+            start_max_abs_arm_rate_rad_s,
+            max_reference_rate_rad_s,
+            position_time_constant_s,
+        })
+    }
+
+    pub const fn commanded_orientation_rad(self) -> f32 {
+        self.commanded_orientation_rad
+    }
+
+    pub const fn start_max_abs_arm_rate_rad_s(self) -> f32 {
+        self.start_max_abs_arm_rate_rad_s
+    }
+
+    pub const fn max_reference_rate_rad_s(self) -> f32 {
+        self.max_reference_rate_rad_s
+    }
+
+    pub const fn position_time_constant_s(self) -> f32 {
+        self.position_time_constant_s
+    }
+}
+
 /// Optional moving arm reference used only after Capture has earned Balance.
 ///
 /// The reference preserves canonical continuous/unwrapped arm state and instead
 /// changes the coordinates seen by the Balance controller. At handoff the
 /// current arm angle/rate are latched as zero tracking error; the rate reference
-/// then decays exponentially toward zero while the angle reference is integrated
-/// analytically from that decaying rate.
+/// first decays toward zero. If recentering is enabled, the stopped arm is then
+/// guided to the nearest unwrapped branch equivalent to the commanded periodic
+/// orientation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BalanceReferenceConfig {
     arm_rate_decay_time_constant_s: f32,
+    recenter: Option<BalanceRecenterConfig>,
 }
 
 impl BalanceReferenceConfig {
     pub fn new(arm_rate_decay_time_constant_s: f32) -> Option<Self> {
         positive(arm_rate_decay_time_constant_s).then_some(Self {
             arm_rate_decay_time_constant_s,
+            recenter: None,
         })
     }
 
     pub const fn arm_rate_decay_time_constant_s(self) -> f32 {
         self.arm_rate_decay_time_constant_s
+    }
+
+    pub const fn recenter(self) -> Option<BalanceRecenterConfig> {
+        self.recenter
+    }
+
+    pub const fn with_recenter(mut self, recenter: BalanceRecenterConfig) -> Self {
+        self.recenter = Some(recenter);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BalanceReferencePhase {
+    SpinDown,
+    Recenter,
+    Hold,
+}
+
+impl BalanceReferencePhase {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SpinDown => "spin_down",
+            Self::Recenter => "recenter",
+            Self::Hold => "hold",
+        }
     }
 }
 
@@ -291,6 +372,8 @@ pub struct BalanceReferenceState {
     pub phi_ref: AngleRad,
     pub phi_dot_ref: AngularRateRadPerSec,
     pub updated_at: TimestampUs,
+    pub phase: BalanceReferencePhase,
+    pub recenter_target_phi: Option<AngleRad>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -372,12 +455,15 @@ impl HybridController {
                 phi_ref: state.phi,
                 phi_dot_ref: state.phi_dot,
                 updated_at: state.timestamp,
+                phase: BalanceReferencePhase::SpinDown,
+                recenter_target_phi: None,
             }
         } else {
             advance_balance_reference(
                 self.balance_reference.expect("balance reference checked above"),
-                state.timestamp,
+                state,
                 config,
+                self.capture.config(),
             )
             .ok_or(HybridControlError::Numeric)?
         };
@@ -449,39 +535,128 @@ fn pendulum_capture_projection(state: &EstimatedState) -> EstimatedState {
 
 fn advance_balance_reference(
     reference: BalanceReferenceState,
-    timestamp: TimestampUs,
+    state: &EstimatedState,
     config: BalanceReferenceConfig,
+    capture_config: CapturePolicyConfig,
 ) -> Option<BalanceReferenceState> {
-    let delta_us = timestamp.0.checked_sub(reference.updated_at.0)?;
+    let delta_us = state.timestamp.0.checked_sub(reference.updated_at.0)?;
     let dt_s = delta_us as f32 * 1.0e-6;
     if !dt_s.is_finite() {
         return None;
     }
     if dt_s == 0.0 {
         return Some(BalanceReferenceState {
-            updated_at: timestamp,
+            updated_at: state.timestamp,
             ..reference
         });
     }
 
-    let tau_s = config.arm_rate_decay_time_constant_s();
-    let decay = expf(-dt_s / tau_s);
-    if !decay.is_finite() || !(0.0..=1.0).contains(&decay) {
+    match reference.phase {
+        BalanceReferencePhase::SpinDown => {
+            let tau_s = config.arm_rate_decay_time_constant_s();
+            let decay = expf(-dt_s / tau_s);
+            if !decay.is_finite() || !(0.0..=1.0).contains(&decay) {
+                return None;
+            }
+
+            let phi_dot_0 = reference.phi_dot_ref.0;
+            let phi_dot_ref = phi_dot_0 * decay;
+            let phi_ref = reference.phi_ref.0 + phi_dot_0 * tau_s * (1.0 - decay);
+            if !phi_ref.is_finite() || !phi_dot_ref.is_finite() {
+                return None;
+            }
+
+            let mut advanced = BalanceReferenceState {
+                phi_ref: AngleRad(phi_ref),
+                phi_dot_ref: AngularRateRadPerSec(phi_dot_ref),
+                updated_at: state.timestamp,
+                phase: BalanceReferencePhase::SpinDown,
+                recenter_target_phi: None,
+            };
+
+            if let Some(recenter) = config.recenter() {
+                let arm_rate_ready = state.phi_dot.0.abs()
+                    <= recenter.start_max_abs_arm_rate_rad_s()
+                    && phi_dot_ref.abs() <= recenter.start_max_abs_arm_rate_rad_s();
+                let pendulum_ready = within(
+                    state,
+                    capture_config.balance_enter_angle_rad,
+                    capture_config.balance_enter_rate_rad_s,
+                );
+                if arm_rate_ready && pendulum_ready {
+                    let target = nearest_equivalent_arm_orientation(
+                        state.phi.0,
+                        recenter.commanded_orientation_rad(),
+                    )?;
+                    advanced.phase = BalanceReferencePhase::Recenter;
+                    advanced.phi_dot_ref = AngularRateRadPerSec(0.0);
+                    advanced.recenter_target_phi = Some(AngleRad(target));
+                }
+            }
+
+            Some(advanced)
+        }
+        BalanceReferencePhase::Recenter => {
+            let recenter = config.recenter()?;
+            let target = reference.recenter_target_phi?.0;
+            let error = target - reference.phi_ref.0;
+            if !error.is_finite() {
+                return None;
+            }
+
+            if error.abs() <= 1.0e-4 {
+                return Some(BalanceReferenceState {
+                    phi_ref: AngleRad(target),
+                    phi_dot_ref: AngularRateRadPerSec(0.0),
+                    updated_at: state.timestamp,
+                    phase: BalanceReferencePhase::Hold,
+                    recenter_target_phi: Some(AngleRad(target)),
+                });
+            }
+
+            let desired_rate = (error / recenter.position_time_constant_s()).clamp(
+                -recenter.max_reference_rate_rad_s(),
+                recenter.max_reference_rate_rad_s(),
+            );
+            let step = desired_rate * dt_s;
+            if !desired_rate.is_finite() || !step.is_finite() {
+                return None;
+            }
+
+            if step.abs() >= error.abs() {
+                Some(BalanceReferenceState {
+                    phi_ref: AngleRad(target),
+                    phi_dot_ref: AngularRateRadPerSec(0.0),
+                    updated_at: state.timestamp,
+                    phase: BalanceReferencePhase::Hold,
+                    recenter_target_phi: Some(AngleRad(target)),
+                })
+            } else {
+                Some(BalanceReferenceState {
+                    phi_ref: AngleRad(reference.phi_ref.0 + step),
+                    phi_dot_ref: AngularRateRadPerSec(desired_rate),
+                    updated_at: state.timestamp,
+                    phase: BalanceReferencePhase::Recenter,
+                    recenter_target_phi: Some(AngleRad(target)),
+                })
+            }
+        }
+        BalanceReferencePhase::Hold => Some(BalanceReferenceState {
+            phi_dot_ref: AngularRateRadPerSec(0.0),
+            updated_at: state.timestamp,
+            ..reference
+        }),
+    }
+}
+
+fn nearest_equivalent_arm_orientation(around_phi: f32, commanded_orientation: f32) -> Option<f32> {
+    if !around_phi.is_finite() || !commanded_orientation.is_finite() {
         return None;
     }
-
-    let phi_dot_0 = reference.phi_dot_ref.0;
-    let phi_dot_ref = phi_dot_0 * decay;
-    let phi_ref = reference.phi_ref.0 + phi_dot_0 * tau_s * (1.0 - decay);
-    if !phi_ref.is_finite() || !phi_dot_ref.is_finite() {
-        return None;
-    }
-
-    Some(BalanceReferenceState {
-        phi_ref: AngleRad(phi_ref),
-        phi_dot_ref: AngularRateRadPerSec(phi_dot_ref),
-        updated_at: timestamp,
-    })
+    let revolution = 2.0 * core::f32::consts::PI;
+    let branch = roundf((around_phi - commanded_orientation) / revolution);
+    let target = commanded_orientation + branch * revolution;
+    target.is_finite().then_some(target)
 }
 
 fn within_angle(state: &EstimatedState, angle_rad: f32) -> bool {
@@ -709,6 +884,7 @@ mod tests {
         let latched = hybrid.balance_reference().unwrap();
         assert_eq!(latched.phi_ref, AngleRad(10.0));
         assert_eq!(latched.phi_dot_ref, AngularRateRadPerSec(-20.0));
+        assert_eq!(latched.phase, BalanceReferencePhase::SpinDown);
 
         let _ = hybrid
             .compute(&state_with_arm_at(104_000, 0.10, 0.4, 10.0, -20.0))
@@ -717,6 +893,68 @@ mod tests {
         assert!(advanced.phi_ref.0 < latched.phi_ref.0);
         assert!(advanced.phi_dot_ref.0.abs() < latched.phi_dot_ref.0.abs());
         assert_eq!(advanced.updated_at, TimestampUs(104_000));
+        assert_eq!(advanced.phase, BalanceReferencePhase::SpinDown);
+    }
+
+    #[test]
+    fn nearest_equivalent_orientation_does_not_unwind_accumulated_revolutions() {
+        let stopped_phi = -1096.0 * core::f32::consts::PI / 180.0;
+        let target = nearest_equivalent_arm_orientation(stopped_phi, 0.0).unwrap();
+        let expected = -3.0 * 2.0 * core::f32::consts::PI;
+        assert!((target - expected).abs() < 1.0e-5);
+        assert!((target - stopped_phi).abs() < core::f32::consts::PI);
+    }
+
+    #[test]
+    fn recenter_waits_for_spin_down_then_moves_reference_to_nearest_branch() {
+        let gains = [0.2, 0.02, 0.01, 0.01];
+        let balance = LqrController::new(gains).unwrap();
+        let recenter = BalanceRecenterConfig::new(0.0, 0.25, 0.25, 0.5).unwrap();
+        let reference_config = BalanceReferenceConfig::new(1.0)
+            .unwrap()
+            .with_recenter(recenter);
+        let mut hybrid = HybridController::new_with_balance_reference(
+            swing(),
+            balance,
+            policy(),
+            reference_config,
+        );
+        let stopped_phi = -1096.0 * core::f32::consts::PI / 180.0;
+
+        hybrid
+            .compute(&state_with_arm_at(1_000, 0.30, 0.5, stopped_phi, -0.20))
+            .unwrap();
+        hybrid
+            .compute(&state_with_arm_at(2_000, 0.10, 0.4, stopped_phi, -0.20))
+            .unwrap();
+        hybrid
+            .compute(&state_with_arm_at(3_000, 0.10, 0.4, stopped_phi, -0.20))
+            .unwrap();
+        hybrid
+            .compute(&state_with_arm_at(4_000, 0.10, 0.4, stopped_phi, -0.20))
+            .unwrap();
+        assert_eq!(hybrid.regime(), ControlRegime::Balance);
+        assert_eq!(
+            hybrid.balance_reference().unwrap().phase,
+            BalanceReferencePhase::SpinDown
+        );
+
+        hybrid
+            .compute(&state_with_arm_at(1_004_000, 0.05, 0.1, stopped_phi, 0.0))
+            .unwrap();
+        let recentering = hybrid.balance_reference().unwrap();
+        assert_eq!(recentering.phase, BalanceReferencePhase::Recenter);
+        let target = recentering.recenter_target_phi.unwrap().0;
+        let expected = -3.0 * 2.0 * core::f32::consts::PI;
+        assert!((target - expected).abs() < 1.0e-5);
+
+        hybrid
+            .compute(&state_with_arm_at(1_104_000, 0.05, 0.1, stopped_phi, 0.0))
+            .unwrap();
+        let moved = hybrid.balance_reference().unwrap();
+        assert_eq!(moved.phase, BalanceReferencePhase::Recenter);
+        assert!(moved.phi_ref.0 > recentering.phi_ref.0);
+        assert!(moved.phi_dot_ref.0 > 0.0);
     }
 
     #[test]
