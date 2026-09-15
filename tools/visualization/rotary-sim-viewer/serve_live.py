@@ -89,9 +89,10 @@ def stop_process(process: subprocess.Popen[str] | None) -> None:
 def log_capture_diagnostics(
     sample: dict,
     previous_regime: str | None,
+    previous_reference_phase: str | None,
     last_log_t: float | None,
-) -> tuple[str | None, float | None]:
-    """Print sparse explanatory diagnostics around upright/capture crossings.
+) -> tuple[str | None, str | None, float | None]:
+    """Print sparse explanatory diagnostics around upright/capture/recenter events.
 
     The values are emitted by rip-sitl-live. This function only formats them;
     it does not recompute control or change the live stream.
@@ -100,7 +101,7 @@ def log_capture_diagnostics(
     diagnostics = sample.get("hybrid_diagnostics")
     estimated = sample.get("estimated_state")
     if not isinstance(diagnostics, dict) or not isinstance(estimated, list) or len(estimated) != 4:
-        return regime or previous_regime, last_log_t
+        return regime or previous_regime, previous_reference_phase, last_log_t
 
     t_s = float(sample.get("t_s", 0.0))
     theta = float(estimated[0])
@@ -108,9 +109,17 @@ def log_capture_diagnostics(
     near_upright = abs(theta) <= math.radians(25.0)
     eligible = bool(diagnostics.get("capture_eligible", False))
     regime_changed = previous_regime is not None and regime != previous_regime
+
+    reference = diagnostics.get("balance_reference")
+    reference_phase = reference.get("phase") if isinstance(reference, dict) else None
+    reference_phase_changed = (
+        previous_reference_phase is not None
+        and reference_phase is not None
+        and reference_phase != previous_reference_phase
+    )
     periodic_near = near_upright and (last_log_t is None or t_s - last_log_t >= 0.050)
 
-    if regime_changed or eligible or periodic_near:
+    if regime_changed or reference_phase_changed or periodic_near:
         requested = sample.get("requested_arm_torque_nm")
         applied = sample.get("applied_arm_torque_nm")
         terms = diagnostics.get("state_feedback_terms_nm")
@@ -124,13 +133,18 @@ def log_capture_diagnostics(
         else:
             term_text = ""
 
-        reference = diagnostics.get("balance_reference")
         if isinstance(reference, dict):
+            target = reference.get("recenter_target_phi_rad")
+            target_text = (
+                f"target={float(target): .3f}rad " if target is not None else "target=--- "
+            )
             reference_text = (
+                f"phase={str(reference_phase):9s} "
                 f"φref={float(reference.get('phi_ref_rad', float('nan'))): .3f}rad "
                 f"φdref={float(reference.get('phi_dot_ref_rad_s', float('nan'))): .3f}rad/s "
                 f"φe={float(reference.get('phi_error_rad', float('nan'))): .3f}rad "
                 f"φde={float(reference.get('phi_dot_error_rad_s', float('nan'))): .3f}rad/s "
+                f"{target_text}"
             )
         else:
             reference_text = ""
@@ -140,7 +154,7 @@ def log_capture_diagnostics(
         print(
             "[capture] "
             f"t={t_s:8.4f}s regime={str(regime):7s} "
-            f"ctrl={str(active_controller):26s} "
+            f"ctrl={str(active_controller):28s} "
             f"theta={math.degrees(theta):8.3f}deg theta_dot={theta_dot:8.3f}rad/s "
             f"E={float(diagnostics['pendulum_energy_j']):.5f}/"
             f"{float(diagnostics['target_energy_j']):.5f}J "
@@ -157,7 +171,7 @@ def log_capture_diagnostics(
         )
         last_log_t = t_s
 
-    return regime or previous_regime, last_log_t
+    return regime or previous_regime, reference_phase or previous_reference_phase, last_log_t
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -267,6 +281,7 @@ class Handler(SimpleHTTPRequestHandler):
             sim_anchor: float | None = None
             display_period = 1.0 / fps
             previous_regime: str | None = None
+            previous_reference_phase: str | None = None
             last_diag_log_t: float | None = None
 
             for raw in process.stdout:
@@ -300,9 +315,10 @@ class Handler(SimpleHTTPRequestHandler):
                     raise RuntimeError("rip-sitl-live emitted a sample before meta")
 
                 sample = message["sample"]
-                previous_regime, last_diag_log_t = log_capture_diagnostics(
+                previous_regime, previous_reference_phase, last_diag_log_t = log_capture_diagnostics(
                     sample,
                     previous_regime,
+                    previous_reference_phase,
                     last_diag_log_t,
                 )
                 sim_t = float(sample["t_s"])
