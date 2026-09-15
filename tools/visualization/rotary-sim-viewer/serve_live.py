@@ -113,6 +113,16 @@ def log_capture_diagnostics(
     if regime_changed or eligible or periodic_near:
         requested = sample.get("requested_arm_torque_nm")
         applied = sample.get("applied_arm_torque_nm")
+        terms = diagnostics.get("state_feedback_terms_nm")
+        if isinstance(terms, dict):
+            term_text = (
+                f"uθ={float(terms.get('theta', float('nan'))): .5f} "
+                f"uθd={float(terms.get('theta_dot', float('nan'))): .5f} "
+                f"uφ={float(terms.get('phi', float('nan'))): .5f} "
+                f"uφd={float(terms.get('phi_dot', float('nan'))): .5f}Nm "
+            )
+        else:
+            term_text = ""
         print(
             "[capture] "
             f"t={t_s:8.4f}s regime={str(regime):7s} "
@@ -121,6 +131,7 @@ def log_capture_diagnostics(
             f"{float(diagnostics['target_energy_j']):.5f}J "
             f"swing={float(diagnostics['swing_torque_nm']): .5f}Nm "
             f"lqr={float(diagnostics['balance_torque_nm']): .5f}Nm "
+            f"{term_text}"
             f"blend={float(diagnostics['capture_blend_weight']):.3f} "
             f"mix={float(diagnostics['capture_blended_torque_nm']): .5f}Nm "
             f"req={float(requested) if requested is not None else float('nan'): .5f}Nm "
