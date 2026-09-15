@@ -12,8 +12,9 @@ use rip_control_runtime::{
 };
 use rip_estimator_input_adapter::EstimatorInputAdapter;
 use rip_hybrid_control::{
-    BalanceReferenceConfig, BalanceReferenceState, CapturePolicy, CapturePolicyConfig,
-    ControlRegime, EnergySwingUpConfig, EnergySwingUpController, HybridController,
+    BalanceRecenterConfig, BalanceReferenceConfig, BalanceReferenceState, CapturePolicy,
+    CapturePolicyConfig, ControlRegime, EnergySwingUpConfig, EnergySwingUpController,
+    HybridController,
 };
 use rip_measurement_model::{EncoderScale, PendulumCalibration};
 use rip_plant_model::{FurutaParameters, FurutaPlant, FurutaState};
@@ -58,9 +59,13 @@ const CAPTURE_EXIT_ANGLE_RAD: f32 = 30.0 * PI / 180.0;
 const CAPTURE_EXIT_RATE_RAD_S: f32 = 4.0;
 const CAPTURE_SETTLE_CYCLES: u16 = 20;
 
-// #67 first simulation experiment only. This shapes controller-reference
-// motion; it is not a Forest D1 specimen constant or physical-authority claim.
+// #67/#68 simulation experiments only. These shape controller-reference motion;
+// they are not Forest D1 specimen constants or physical-authority claims.
 const BALANCE_ARM_RATE_REFERENCE_TAU_S: f32 = 1.0;
+const BALANCE_RECENTER_COMMANDED_ORIENTATION_RAD: f32 = 0.0;
+const BALANCE_RECENTER_START_MAX_ABS_ARM_RATE_RAD_S: f32 = 0.25;
+const BALANCE_RECENTER_MAX_REFERENCE_RATE_RAD_S: f32 = 0.25;
+const BALANCE_RECENTER_POSITION_TAU_S: f32 = 0.5;
 
 const SIMULATION_MAX_ABS_COMMAND: f32 = 1.0;
 
@@ -695,6 +700,10 @@ impl SitlSystem for RotarySitlSystem {
         json!({
             "balance_controller_profile": self.balance_controller_profile.as_str(),
             "balance_arm_rate_reference_tau_s": BALANCE_ARM_RATE_REFERENCE_TAU_S,
+            "balance_recenter_commanded_orientation_rad": BALANCE_RECENTER_COMMANDED_ORIENTATION_RAD,
+            "balance_recenter_start_max_abs_arm_rate_rad_s": BALANCE_RECENTER_START_MAX_ABS_ARM_RATE_RAD_S,
+            "balance_recenter_max_reference_rate_rad_s": BALANCE_RECENTER_MAX_REFERENCE_RATE_RAD_S,
+            "balance_recenter_position_tau_s": BALANCE_RECENTER_POSITION_TAU_S,
             "computed_cycles": self.metrics.computed_cycles,
             "authorized_cycles": self.metrics.authorized_cycles,
             "denied_cycles": self.metrics.denied_cycles,
@@ -759,8 +768,16 @@ fn hybrid_controller(
         settle_cycles: CAPTURE_SETTLE_CYCLES,
     })
     .map_err(|error| boxed(format!("capture setup: {error:?}")))?;
+    let recenter = BalanceRecenterConfig::new(
+        BALANCE_RECENTER_COMMANDED_ORIENTATION_RAD,
+        BALANCE_RECENTER_START_MAX_ABS_ARM_RATE_RAD_S,
+        BALANCE_RECENTER_MAX_REFERENCE_RATE_RAD_S,
+        BALANCE_RECENTER_POSITION_TAU_S,
+    )
+    .ok_or_else(|| boxed("invalid Balance recenter reference configuration"))?;
     let balance_reference = BalanceReferenceConfig::new(BALANCE_ARM_RATE_REFERENCE_TAU_S)
-        .ok_or_else(|| boxed("invalid Balance arm-rate reference decay constant"))?;
+        .ok_or_else(|| boxed("invalid Balance arm-rate reference decay constant"))?
+        .with_recenter(recenter);
     Ok(HybridController::new_with_balance_reference(
         swing,
         balance,
@@ -793,7 +810,9 @@ fn balance_reference_json(reference: BalanceReferenceState) -> Value {
     json!({
         "phi_ref_rad": reference.phi_ref.0,
         "phi_dot_ref_rad_s": reference.phi_dot_ref.0,
-        "updated_at_us": reference.updated_at.0
+        "updated_at_us": reference.updated_at.0,
+        "phase": reference.phase.as_str(),
+        "recenter_target_phi_rad": reference.recenter_target_phi.map(|target| target.0)
     })
 }
 
@@ -907,6 +926,10 @@ mod tests {
             assert_eq!(
                 summary["system"]["balance_arm_rate_reference_tau_s"],
                 BALANCE_ARM_RATE_REFERENCE_TAU_S
+            );
+            assert_eq!(
+                summary["system"]["balance_recenter_max_reference_rate_rad_s"],
+                BALANCE_RECENTER_MAX_REFERENCE_RATE_RAD_S
             );
             assert!(summary["system"]["computed_cycles"].as_u64().unwrap() > 0);
             assert!(summary["system"]["authorized_cycles"].as_u64().unwrap() > 0);
