@@ -123,17 +123,19 @@ def log_capture_diagnostics(
             )
         else:
             term_text = ""
+        active_controller = diagnostics.get("active_controller", "unknown")
         print(
             "[capture] "
             f"t={t_s:8.4f}s regime={str(regime):7s} "
+            f"ctrl={str(active_controller):26s} "
             f"theta={math.degrees(theta):8.3f}deg theta_dot={theta_dot:8.3f}rad/s "
             f"E={float(diagnostics['pendulum_energy_j']):.5f}/"
             f"{float(diagnostics['target_energy_j']):.5f}J "
             f"swing={float(diagnostics['swing_torque_nm']): .5f}Nm "
-            f"lqr={float(diagnostics['balance_torque_nm']): .5f}Nm "
+            f"capture={float(diagnostics.get('capture_torque_nm', float('nan'))): .5f}Nm "
+            f"full={float(diagnostics['balance_torque_nm']): .5f}Nm "
             f"{term_text}"
-            f"blend={float(diagnostics['capture_blend_weight']):.3f} "
-            f"mix={float(diagnostics['capture_blended_torque_nm']): .5f}Nm "
+            f"selected={float(diagnostics['capture_blended_torque_nm']): .5f}Nm "
             f"req={float(requested) if requested is not None else float('nan'): .5f}Nm "
             f"applied={float(applied) if applied is not None else float('nan'): .5f}Nm "
             f"eligible={eligible}"
@@ -280,73 +282,74 @@ class Handler(SimpleHTTPRequestHandler):
                 if message_type != "sample":
                     continue
                 if not meta_sent:
-                    raise RuntimeError("rip-sitl-live emitted a sample before metadata")
+                    raise RuntimeError("rip-sitl-live emitted a sample before meta")
 
                 sample = message["sample"]
-                if scenario_key == "swingup":
-                    previous_regime, last_diag_log_t = log_capture_diagnostics(
-                        sample, previous_regime, last_diag_log_t
-                    )
-
-                t_s = float(sample["t_s"])
+                previous_regime, last_diag_log_t = log_capture_diagnostics(
+                    sample,
+                    previous_regime,
+                    last_diag_log_t,
+                )
+                sim_t = float(sample["t_s"])
                 if next_display_t is None:
-                    next_display_t = t_s
-                if t_s + 1e-12 < next_display_t:
+                    next_display_t = sim_t
+                if sim_t + 1e-12 < next_display_t:
                     continue
-
-                while next_display_t <= t_s + 1e-12:
-                    next_display_t += display_period
 
                 if wall_anchor is None:
                     wall_anchor = time.perf_counter()
-                    sim_anchor = t_s
-                else:
-                    assert sim_anchor is not None
-                    target_wall = wall_anchor + (t_s - sim_anchor) / speed
-                    delay = target_wall - time.perf_counter()
-                    if delay > 0:
-                        time.sleep(delay)
+                    sim_anchor = sim_t
+                assert sim_anchor is not None
+                due = wall_anchor + (sim_t - sim_anchor) / speed
+                delay = due - time.perf_counter()
+                if delay > 0:
+                    time.sleep(delay)
 
                 if not self.write_sse("sample", sample):
                     return
-                last_display_t = t_s
+                last_display_t = sim_t
+                next_display_t += display_period
 
-            return_code = process.wait()
-            if return_code != 0:
-                stderr = process.stderr.read().strip() if process.stderr else ""
-                raise RuntimeError(stderr or f"rip-sitl-live exited with code {return_code}")
-
-            self.write_sse(
-                "status",
-                {"phase": "ended", "scenario": scenario_key, "t_s": last_display_t},
-            )
-        except Exception as error:
-            if is_client_disconnect(error):
-                return
-            self.write_sse("stream-error", {"message": str(error)})
+            stderr = process.stderr.read() if process.stderr is not None else ""
+            code = process.wait()
+            if code != 0:
+                raise RuntimeError(stderr.strip() or f"rip-sitl-live exited with {code}")
+            if last_display_t is not None:
+                self.write_sse("end", {"t_s": last_display_t})
+        except OSError as error:
+            if not is_client_disconnect(error):
+                try:
+                    self.write_sse("stream-error", {"message": str(error)})
+                except OSError as nested:
+                    if not is_client_disconnect(nested):
+                        raise
+        except Exception as error:  # noqa: BLE001 - report backend failures to the viewer.
+            try:
+                self.write_sse("stream-error", {"message": str(error)})
+            except OSError as nested:
+                if not is_client_disconnect(nested):
+                    raise
         finally:
             stop_process(process)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    url = f"http://{args.host}:{args.port}/tools/visualization/rotary-sim-viewer/"
     print("Rotary Simulation Console live server")
-    print(f"viewer: {url}")
+    print(f"viewer: http://{args.host}:{args.port}/tools/visualization/rotary-sim-viewer/")
     print("Ctrl+C to stop")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        print("\nKeyboard interrupt received, exiting.")
     finally:
         server.server_close()
-    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
