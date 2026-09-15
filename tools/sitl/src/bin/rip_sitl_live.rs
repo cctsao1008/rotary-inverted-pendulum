@@ -246,12 +246,11 @@ fn hybrid_diagnostics(
     swing_torque = swing_torque.clamp(-MAX_ABS_TORQUE_NM, MAX_ABS_TORQUE_NM);
 
     let gains = balance_controller.gains();
-    let balance_torque = -(
-        gains[0] as f64 * theta
-            + gains[1] as f64 * theta_dot
-            + gains[2] as f64 * phi
-            + gains[3] as f64 * phi_dot
-    );
+    let u_theta = -(gains[0] as f64 * theta);
+    let u_theta_dot = -(gains[1] as f64 * theta_dot);
+    let u_phi = -(gains[2] as f64 * phi);
+    let u_phi_dot = -(gains[3] as f64 * phi_dot);
+    let balance_torque = u_theta + u_theta_dot + u_phi + u_phi_dot;
 
     let capture_angle_eligible = theta.abs() <= CAPTURE_ENTER_ANGLE_RAD;
     let legacy_capture_rate_eligible = theta_dot.abs() <= LEGACY_CAPTURE_ENTER_RATE_RAD_S;
@@ -274,6 +273,13 @@ fn hybrid_diagnostics(
         "energy_error_j": energy_error,
         "swing_torque_nm": swing_torque,
         "balance_torque_nm": balance_torque,
+        "state_feedback_terms_nm": {
+            "theta": u_theta,
+            "theta_dot": u_theta_dot,
+            "phi": u_phi,
+            "phi_dot": u_phi_dot,
+            "sum": balance_torque
+        },
         "capture_blend_weight": capture_blend_weight,
         "capture_blended_torque_nm": capture_blended_torque,
         "capture_angle_eligible": capture_angle_eligible,
