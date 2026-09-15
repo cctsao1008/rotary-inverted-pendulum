@@ -127,12 +127,16 @@ impl EnergySwingUpController {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CapturePolicyConfig {
     pub capture_enter_angle_rad: f32,
+    // Retained for configuration compatibility and diagnostics. Capture entry
+    // is intentionally angle-driven; this value does not gate SwingUp -> Capture.
     pub capture_enter_rate_rad_s: f32,
     pub balance_enter_angle_rad: f32,
     pub balance_enter_rate_rad_s: f32,
     pub balance_exit_angle_rad: f32,
     pub balance_exit_rate_rad_s: f32,
     pub capture_exit_angle_rad: f32,
+    // Retained for configuration compatibility and diagnostics. Capture exit
+    // uses angle hysteresis; this value does not gate Capture -> SwingUp.
     pub capture_exit_rate_rad_s: f32,
     pub settle_cycles: u16,
 }
@@ -202,11 +206,9 @@ impl CapturePolicy {
 
         self.regime = match self.regime {
             ControlRegime::SwingUp => {
-                if within(
-                    state,
-                    self.config.capture_enter_angle_rad,
-                    self.config.capture_enter_rate_rad_s,
-                ) {
+                // The EBC-to-stabilizer handoff is source-aligned: crossing the
+                // capture angle boundary is enough to let the stabilizer catch.
+                if within_angle(state, self.config.capture_enter_angle_rad) {
                     self.settled_cycles = 0;
                     ControlRegime::Capture
                 } else {
@@ -214,11 +216,9 @@ impl CapturePolicy {
                 }
             }
             ControlRegime::Capture => {
-                if !within(
-                    state,
-                    self.config.capture_exit_angle_rad,
-                    self.config.capture_exit_rate_rad_s,
-                ) {
+                // Capture owns the high-rate catch until angle hysteresis says
+                // the attempt failed. Rate is used only for Balance qualification.
+                if !within_angle(state, self.config.capture_exit_angle_rad) {
                     self.settled_cycles = 0;
                     ControlRegime::SwingUp
                 } else if within(
@@ -239,11 +239,7 @@ impl CapturePolicy {
                 }
             }
             ControlRegime::Balance => {
-                if !within(
-                    state,
-                    self.config.capture_exit_angle_rad,
-                    self.config.capture_exit_rate_rad_s,
-                ) {
+                if !within_angle(state, self.config.capture_exit_angle_rad) {
                     self.settled_cycles = 0;
                     ControlRegime::SwingUp
                 } else if !within(
@@ -260,20 +256,6 @@ impl CapturePolicy {
         };
 
         Ok(self.regime)
-    }
-
-    fn capture_blend_weight(&self, state: &EstimatedState) -> f32 {
-        let angle_weight = proximity_weight(
-            state.theta.0.abs(),
-            self.config.balance_enter_angle_rad,
-            self.config.capture_enter_angle_rad,
-        );
-        let rate_weight = proximity_weight(
-            state.theta_dot.0.abs(),
-            self.config.balance_enter_rate_rad_s,
-            self.config.capture_enter_rate_rad_s,
-        );
-        angle_weight.min(rate_weight)
     }
 }
 
@@ -327,44 +309,23 @@ impl Controller for HybridController {
                 .swing_up
                 .compute(state)
                 .map_err(HybridControlError::SwingUp),
-            ControlRegime::Balance => self
+            // Capture is a catch phase, not an EBC/LQR blend. Once the angle
+            // boundary is crossed, the bounded downstream runtime owns limiting
+            // while the stabilizing state-feedback law owns the demand.
+            ControlRegime::Capture | ControlRegime::Balance => self
                 .balance
                 .compute(state)
                 .map_err(HybridControlError::Balance),
-            ControlRegime::Capture => {
-                let swing = self
-                    .swing_up
-                    .compute(state)
-                    .map_err(HybridControlError::SwingUp)?;
-                let balance = self
-                    .balance
-                    .compute(state)
-                    .map_err(HybridControlError::Balance)?;
-                let weight = self.capture.capture_blend_weight(state);
-                let torque = swing.arm_torque.0 * (1.0 - weight) + balance.arm_torque.0 * weight;
-                if !torque.is_finite() {
-                    return Err(HybridControlError::Numeric);
-                }
-                Ok(GeneralizedDemand {
-                    arm_torque: TorqueNm(torque),
-                })
-            }
         }
     }
 }
 
-fn within(state: &EstimatedState, angle_rad: f32, rate_rad_s: f32) -> bool {
-    state.theta.0.abs() <= angle_rad && state.theta_dot.0.abs() <= rate_rad_s
+fn within_angle(state: &EstimatedState, angle_rad: f32) -> bool {
+    state.theta.0.abs() <= angle_rad
 }
 
-fn proximity_weight(value: f32, inner: f32, outer: f32) -> f32 {
-    if value <= inner {
-        1.0
-    } else if value >= outer {
-        0.0
-    } else {
-        1.0 - (value - inner) / (outer - inner)
-    }
+fn within(state: &EstimatedState, angle_rad: f32, rate_rad_s: f32) -> bool {
+    within_angle(state, angle_rad) && state.theta_dot.0.abs() <= rate_rad_s
 }
 
 fn positive(value: f32) -> bool {
@@ -438,6 +399,32 @@ mod tests {
     }
 
     #[test]
+    fn capture_entry_is_angle_only_even_at_high_rate() {
+        let mut policy = policy();
+        assert_eq!(
+            policy.update(&state(0.30, 20.0)).unwrap(),
+            ControlRegime::Capture
+        );
+    }
+
+    #[test]
+    fn capture_uses_angle_hysteresis_while_rate_remains_high() {
+        let mut policy = policy();
+        assert_eq!(
+            policy.update(&state(0.30, 20.0)).unwrap(),
+            ControlRegime::Capture
+        );
+        assert_eq!(
+            policy.update(&state(0.40, 20.0)).unwrap(),
+            ControlRegime::Capture
+        );
+        assert_eq!(
+            policy.update(&state(0.60, 20.0)).unwrap(),
+            ControlRegime::SwingUp
+        );
+    }
+
+    #[test]
     fn capture_requires_settled_cycles_before_balance() {
         let mut policy = policy();
         assert_eq!(
@@ -474,6 +461,20 @@ mod tests {
             policy.update(&state(0.60, 0.5)).unwrap(),
             ControlRegime::SwingUp
         );
+    }
+
+    #[test]
+    fn capture_hands_demand_directly_to_state_feedback() {
+        let gains = [0.2, 0.02, 0.01, 0.01];
+        let capture_state = state(0.30, 20.0);
+        let mut expected_controller = LqrController::new(gains).unwrap();
+        let expected = expected_controller.compute(&capture_state).unwrap();
+        let balance = LqrController::new(gains).unwrap();
+        let mut hybrid = HybridController::new(swing(), balance, policy());
+
+        let actual = hybrid.compute(&capture_state).unwrap();
+        assert_eq!(hybrid.regime(), ControlRegime::Capture);
+        assert_eq!(actual, expected);
     }
 
     #[test]
