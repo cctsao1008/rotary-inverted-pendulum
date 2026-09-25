@@ -460,7 +460,8 @@ impl HybridController {
             }
         } else {
             advance_balance_reference(
-                self.balance_reference.expect("balance reference checked above"),
+                self.balance_reference
+                    .expect("balance reference checked above"),
                 state,
                 config,
                 self.capture.config(),
@@ -513,10 +514,8 @@ impl Controller for HybridController {
                     .map_err(HybridControlError::Balance)
             }
             ControlRegime::Balance => {
-                let tracking_state = self.balance_tracking_state(
-                    state,
-                    previous_regime != ControlRegime::Balance,
-                )?;
+                let tracking_state =
+                    self.balance_tracking_state(state, previous_regime != ControlRegime::Balance)?;
                 self.balance
                     .compute(&tracking_state)
                     .map_err(HybridControlError::Balance)
