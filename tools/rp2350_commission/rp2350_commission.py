@@ -19,7 +19,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--hid-path", help="override auto-detected hidapi path")
     parser.add_argument("--yes", action="store_true", help="confirm bounded active tests non-interactively")
 
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="action", required=True)
 
     sub.add_parser("status")
 
@@ -33,7 +33,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--duration", type=float, default=5.0)
 
     p = sub.add_parser("motor-direction")
-    p.add_argument("--command", type=float, default=0.10)
+    p.add_argument("--command", dest="motor_command", type=float, default=0.10)
     p.add_argument("--hold", type=float, default=1.0)
 
     p = sub.add_parser("speed-sweep")
@@ -76,19 +76,26 @@ def _print(value) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     with Rp2350Device(hid_path=args.hid_path, cdc_port=args.cdc_port) as device:
-        if args.command == "status":
+        if args.action == "status":
             _print({"version": device.version(), "status": device.status()})
-        elif args.command == "monitor":
+        elif args.action == "monitor":
             _print(sensors.monitor(device, args.duration))
-        elif args.command == "adc":
+        elif args.action == "adc":
             _print(sensors.adc(device, args.duration))
-        elif args.command == "encoder":
+        elif args.action == "encoder":
             _print(sensors.encoder(device, args.duration))
-        elif args.command == "motor-direction":
-            _print(motor.motor_direction(device, command=args.command, hold_s=args.hold, assume_yes=args.yes))
-        elif args.command == "speed-sweep":
+        elif args.action == "motor-direction":
+            _print(
+                motor.motor_direction(
+                    device,
+                    command=args.motor_command,
+                    hold_s=args.hold,
+                    assume_yes=args.yes,
+                )
+            )
+        elif args.action == "speed-sweep":
             _print(motor.speed_sweep(device, commands=args.commands, hold_s=args.hold, assume_yes=args.yes))
-        elif args.command == "position-step":
+        elif args.action == "position-step":
             _print(
                 motor.position_step(
                     device,
@@ -100,9 +107,9 @@ def main(argv: list[str] | None = None) -> int:
                     assume_yes=args.yes,
                 )
             )
-        elif args.command == "step-response":
+        elif args.action == "step-response":
             _print(sysid.step_response(device, amplitude=args.amplitude, hold_s=args.hold, assume_yes=args.yes))
-        elif args.command == "chirp":
+        elif args.action == "chirp":
             _print(
                 sysid.chirp(
                     device,
@@ -113,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
                     assume_yes=args.yes,
                 )
             )
-        elif args.command == "prbs":
+        elif args.action == "prbs":
             _print(
                 sysid.prbs(
                     device,
@@ -124,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
                     assume_yes=args.yes,
                 )
             )
-        elif args.command == "all":
+        elif args.action == "all":
             results = {
                 "status": {"version": device.version(), "status": device.status()},
                 "adc": sensors.adc(device, args.passive_duration),
