@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+import time
 
 from device import Rp2350Device
 from recording import RunRecorder
@@ -29,7 +30,8 @@ def monitor(device: Rp2350Device, duration_s: float = 10.0) -> dict[str, object]
             f"A/B={sample.encoder_a}/{sample.encoder_b} "
             f"enc={sample.arm_encoder_count:8d} "
             f"theta={sample.theta:+.5f} theta_dot={sample.theta_dot:+.5f} "
-            f"phi={sample.phi:+.5f} phi_dot={sample.phi_dot:+.5f}"
+            f"phi={sample.phi:+.5f} phi_dot={sample.phi_dot:+.5f} "
+            f"cmd={sample.normalized_command:+.3f} exec={sample.execution_time_us}us"
         )
     return {"test": "monitor", "samples": count, "last": last.as_dict() if last else None}
 
@@ -59,14 +61,40 @@ def adc(device: Rp2350Device, duration_s: float = 5.0) -> dict[str, object]:
         return summary
 
 
-def encoder(device: Rp2350Device, duration_s: float = 5.0) -> dict[str, object]:
+def encoder(
+    device: Rp2350Device,
+    duration_s: float = 5.0,
+    *,
+    motor_command: float | None = None,
+) -> dict[str, object]:
+    """Capture Encoder1 A/B/count, optionally while directly driving the arm."""
     device.start_telemetry()
     with RunRecorder("encoder") as recorder:
-        recorder.write_metadata(_metadata(device, "encoder"))
-        samples = list(device.samples(duration_s))
-        for sample in samples:
-            recorder.append_sample(sample)
-        recorder.append_cdc(device.drain_cdc())
+        metadata = _metadata(device, "encoder")
+        metadata["motor_command"] = motor_command
+        recorder.write_metadata(metadata)
+
+        samples = []
+        deadline = time.monotonic() + duration_s
+        next_refresh = 0.0
+        try:
+            while time.monotonic() < deadline:
+                now = time.monotonic()
+                if motor_command is not None and now >= next_refresh:
+                    device.set_motor_command(motor_command, lease_ms=250)
+                    next_refresh = now + 0.10
+                sample = device.read_sample(100)
+                if sample is not None:
+                    samples.append(sample)
+                    recorder.append_sample(
+                        sample,
+                        requested_command=motor_command if motor_command is not None else 0.0,
+                    )
+                recorder.append_cdc(device.drain_cdc())
+        finally:
+            if motor_command is not None:
+                device.safe_off()
+
         if not samples:
             raise RuntimeError("no HID telemetry received")
         states = sorted({(sample.encoder_a, sample.encoder_b) for sample in samples})
@@ -74,6 +102,7 @@ def encoder(device: Rp2350Device, duration_s: float = 5.0) -> dict[str, object]:
         summary = {
             "test": "encoder",
             "samples": len(samples),
+            "motor_command": motor_command,
             "observed_ab_states": [f"{a}{b}" for a, b in states],
             "start_count": samples[0].arm_encoder_count,
             "end_count": samples[-1].arm_encoder_count,
