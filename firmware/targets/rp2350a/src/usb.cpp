@@ -63,7 +63,10 @@ void handle_line() {
 }  // namespace
 
 void init() {
-    tusb_init();
+    tusb_rhport_init_t rh_init{};
+    rh_init.role = TUSB_ROLE_DEVICE;
+    rh_init.speed = TUSB_SPEED_FULL;
+    (void)tud_rhport_init(0, &rh_init);
 }
 
 void set_snapshot_source(const RuntimeSnapshot* snapshot) { g_snapshot = snapshot; }
