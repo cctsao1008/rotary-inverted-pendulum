@@ -27,8 +27,8 @@ uint8_t const* tud_descriptor_device_cb(void) {
     return (uint8_t const*)&desc_device;
 }
 
-// 64-byte vendor-defined input/output report. The input side carries the
-// deterministic runtime snapshot; output is reserved for future host commands.
+// 64-byte vendor-defined input/output report. Input carries binary runtime
+// telemetry; output carries versioned host test commands.
 static uint8_t const desc_hid_report[] = {
     0x06, 0x00, 0xFF,  // Usage Page (Vendor 0xFF00)
     0x09, 0x01,        // Usage 1
