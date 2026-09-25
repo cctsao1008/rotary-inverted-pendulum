@@ -73,7 +73,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=1)
 
     p = sub.add_parser("all")
-    p.add_argument("--passive-duration", type=float, default=5.0)
+    p.add_argument("--sensor-duration", type=float, default=5.0)
+    p.add_argument("--encoder-command", type=float, default=0.10)
     p.add_argument("--position-delta", type=float, default=0.25)
     p.add_argument("--chirp-duration", type=float, default=20.0)
     p.add_argument("--prbs-duration", type=float, default=20.0)
@@ -159,8 +160,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "all":
             results = {
                 "status": {"version": device.version(), "status": device.status()},
-                "adc": sensors.adc(device, args.passive_duration),
-                "encoder": sensors.encoder(device, args.passive_duration),
+                "adc": sensors.adc(device, args.sensor_duration),
+                "encoder": sensors.encoder(
+                    device,
+                    args.sensor_duration,
+                    motor_command=args.encoder_command,
+                ),
             }
             results["motor_direction"] = motor.motor_direction(device)
             results["speed_sweep"] = motor.speed_sweep(device)
