@@ -2,7 +2,7 @@ name: RP2350 Pico SDK
 
 on:
   push:
-    branches: [main]
+    branches: [main, rp2350-pico-sdk]
     paths:
       - "firmware/targets/rp2350a/**"
       - "tools/rp2350_commission/**"
