@@ -27,7 +27,6 @@ add_executable(rip_rp2350a
     src/runtime.cpp
     src/platform.cpp
     src/encoder_diag.cpp
-    src/maintenance.cpp
     src/commissioning.cpp
     src/usb.cpp
     src/usb_descriptors.c
