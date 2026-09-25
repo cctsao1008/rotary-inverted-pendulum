@@ -1,0 +1,14 @@
+[package]
+name = "rip-firmware-rp2350a"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+cortex-m = "0.7"
+embedded-hal = "1.0"
+panic-halt = "0.2"
+rip-assembly-rp2350-uno-balance = { path = "../../assemblies/rp2350-uno-balance" }
+rip-board-uno-rp2350 = { path = "../../boards/uno-rp2350" }
+rp235x-hal = { version = "0.4.0", features = ["rt", "critical-section-impl", "binary-info"] }
