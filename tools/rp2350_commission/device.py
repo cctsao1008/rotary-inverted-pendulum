@@ -42,8 +42,6 @@ class Rp2350Device:
         with suppress(Exception):
             self.safe_off()
         with suppress(Exception):
-            self.maintenance_exit()
-        with suppress(Exception):
             self.stop_telemetry()
         self.cdc.close()
         self.hid.close()
@@ -146,12 +144,6 @@ class Rp2350Device:
 
     def safe_off(self) -> None:
         self.command(HidCommand.SAFE_OFF)
-
-    def maintenance_enter(self) -> None:
-        self.command(HidCommand.MAINTENANCE_ENTER)
-
-    def maintenance_exit(self) -> None:
-        self.command(HidCommand.MAINTENANCE_EXIT)
 
     def set_motor_command(self, value: float, *, lease_ms: int = 250) -> float:
         ack = self.command(
