@@ -40,17 +40,17 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let cli = parse_cli().map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let cli =
+        parse_cli().map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     let scenario = Scenario::load(&cli.scenario)?;
     scenario.validate()?;
     let rotary = scenario
         .rotary
         .ok_or_else(|| io::Error::other("live SITL requires a [rotary] scenario"))?;
     if scenario.sensor_period_us != scenario.runtime_period_us {
-        return Err(io::Error::other(
-            "live SITL requires sensor_period_us == runtime_period_us",
-        )
-        .into());
+        return Err(
+            io::Error::other("live SITL requires sensor_period_us == runtime_period_us").into(),
+        );
     }
     if !scenario.missed_runtime_at_us.is_empty() {
         return Err(io::Error::other(
@@ -108,8 +108,14 @@ fn run() -> Result<(), Box<dyn Error>> {
             &mut merged,
             system.on_event(EventKind::ObservationDelivery, at)?,
         );
-        merge_payload(&mut merged, system.on_event(EventKind::ProductionRuntime, at)?);
-        merge_payload(&mut merged, system.on_event(EventKind::ActuationCommit, at)?);
+        merge_payload(
+            &mut merged,
+            system.on_event(EventKind::ProductionRuntime, at)?,
+        );
+        merge_payload(
+            &mut merged,
+            system.on_event(EventKind::ActuationCommit, at)?,
+        );
 
         let sample = viewer_sample(at, &merged, &parameters, cli.balance_controller)?;
         writeln!(out, "{}", json!({"type": "sample", "sample": sample}))?;
@@ -289,8 +295,8 @@ fn hybrid_diagnostics(
 
     let capture_angle_eligible = theta.abs() <= CAPTURE_ENTER_ANGLE_RAD;
     let legacy_capture_rate_eligible = theta_dot.abs() <= LEGACY_CAPTURE_ENTER_RATE_RAD_S;
-    let balance_eligible = theta.abs() <= BALANCE_ENTER_ANGLE_RAD
-        && theta_dot.abs() <= BALANCE_ENTER_RATE_RAD_S;
+    let balance_eligible =
+        theta.abs() <= BALANCE_ENTER_ANGLE_RAD && theta_dot.abs() <= BALANCE_ENTER_RATE_RAD_S;
     let state_feedback_active = matches!(regime, "capture" | "balance");
     let capture_projection_active = regime == "capture";
 
@@ -398,10 +404,10 @@ fn parse_cli() -> Result<Cli, String> {
                 ));
             }
             "--parameters" => {
-                parameters = Some(PathBuf::from(
-                    args.next()
-                        .ok_or_else(|| "--parameters requires a value".to_string())?,
-                ));
+                parameters =
+                    Some(PathBuf::from(args.next().ok_or_else(|| {
+                        "--parameters requires a value".to_string()
+                    })?));
             }
             "--balance-controller" => {
                 let value = args
