@@ -9,8 +9,6 @@ if(NOT DEFINED ENV{PICO_SDK_PATH})
     message(FATAL_ERROR "PICO_SDK_PATH must point to a Raspberry Pi Pico SDK checkout")
 endif()
 
-# The UNO-form-factor RP2350A board is not a Raspberry Pi Pico 2. Keep its
-# board definition local so flash geometry and MCU package are explicit.
 set(PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/boards" CACHE STRING "Custom Pico SDK board headers")
 set(PICO_BOARD uno_rp2350 CACHE STRING "Pico SDK board")
 
@@ -57,8 +55,6 @@ else()
     target_compile_definitions(rip_rp2350a PRIVATE RIP_ENABLE_CDC_LOG=0)
 endif()
 
-# USB is owned directly by TinyUSB so CDC and HID can coexist as one composite
-# device. Do not also instantiate Pico stdio USB.
 pico_enable_stdio_usb(rip_rp2350a 0)
 pico_enable_stdio_uart(rip_rp2350a 0)
 
