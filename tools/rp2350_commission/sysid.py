@@ -55,7 +55,6 @@ def step_response(
         recorder.write_metadata(
             {"test": "step-response", "amplitude": amplitude, "hold_s": hold_s}
         )
-        device.maintenance_enter()
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, lambda _: amplitude, hold_s, tag="positive-step")
@@ -63,10 +62,7 @@ def step_response(
             _stream_command(device, recorder, lambda _: -amplitude, hold_s, tag="negative-step")
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
-            try:
-                device.safe_off()
-            finally:
-                device.maintenance_exit()
+            device.safe_off()
         summary = {
             "test": "step-response",
             "amplitude": amplitude,
@@ -107,16 +103,12 @@ def chirp(
                 "duration_s": duration_s,
             }
         )
-        device.maintenance_enter()
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, command_at, duration_s, tag="chirp")
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
-            try:
-                device.safe_off()
-            finally:
-                device.maintenance_exit()
+            device.safe_off()
         summary = {
             "test": "chirp",
             "artifact_dir": str(recorder.directory),
@@ -155,16 +147,12 @@ def prbs(
                 "seed": seed,
             }
         )
-        device.maintenance_enter()
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, command_at, duration_s, tag="prbs")
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
-            try:
-                device.safe_off()
-            finally:
-                device.maintenance_exit()
+            device.safe_off()
         summary = {
             "test": "prbs",
             "artifact_dir": str(recorder.directory),
