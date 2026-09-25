@@ -65,6 +65,9 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("all")
     p.add_argument("--passive-duration", type=float, default=5.0)
+    p.add_argument("--position-delta", type=float, default=0.25)
+    p.add_argument("--chirp-duration", type=float, default=20.0)
+    p.add_argument("--prbs-duration", type=float, default=20.0)
 
     return parser
 
@@ -140,7 +143,16 @@ def main(argv: list[str] | None = None) -> int:
             motor.confirm_active_test("all active commissioning tests", 0.50, args.yes)
             results["motor_direction"] = motor.motor_direction(device, assume_yes=True)
             results["speed_sweep"] = motor.speed_sweep(device, assume_yes=True)
+            results["position_step"] = motor.position_step(
+                device, delta_rad=args.position_delta, assume_yes=True
+            )
             results["step_response"] = sysid.step_response(device, assume_yes=True)
+            results["chirp"] = sysid.chirp(
+                device, duration_s=args.chirp_duration, assume_yes=True
+            )
+            results["prbs"] = sysid.prbs(
+                device, duration_s=args.prbs_duration, assume_yes=True
+            )
             _print(results)
     return 0
 
