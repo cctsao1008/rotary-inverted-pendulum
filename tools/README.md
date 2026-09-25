@@ -18,4 +18,4 @@ rp2350_commission/
 
 `tools/visualization` owns read-only presentation of machine-readable simulation, model, telemetry, and evidence outputs. Visualization may explain evidence but does not produce dynamics, control decisions, model authority, specimen calibration, or physical actuation authority.
 
-`tools/rp2350_commission` owns the host-side RP2350A commissioning session. One CLI coordinates both USB HID machine telemetry and CDC diagnostic logging, records evidence under `artifacts/commissioning`, and groups passive sensor checks, bounded motor characterization, position tests, and SysID excitation behind one operator-facing entry point.
+`tools/rp2350_commission` owns the host-side RP2350A commissioning session. One CLI coordinates both USB HID machine telemetry/control and CDC diagnostic logging, records evidence under `artifacts/commissioning`, and groups passive sensor checks, bounded motor characterization, position tests, and SysID excitation behind one operator-facing entry point. Its `all` command is the complete commissioning sequence rather than a reduced smoke-test subset.
