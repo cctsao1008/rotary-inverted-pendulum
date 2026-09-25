@@ -36,8 +36,6 @@ class HidCommand(IntEnum):
     GET_STATUS = 0x01
     TELEMETRY_ON = 0x02
     TELEMETRY_OFF = 0x03
-    MAINTENANCE_ENTER = 0x10
-    MAINTENANCE_EXIT = 0x11
     SET_MOTOR_COMMAND = 0x12
     SAFE_OFF = 0x13
 
@@ -128,9 +126,6 @@ def decode_ack(data: bytes) -> CommandAck:
 
 
 def decode_device_report(data: bytes) -> TelemetrySample | CommandAck:
-    # Legacy/current runtime telemetry uses byte 1 as low-valued flags; the
-    # commissioning acknowledgement reserves 0x81, so the layouts are
-    # unambiguous without changing the existing telemetry ABI.
     if len(data) == HID_REPORT_SIZE and data[1] == 0x81:
         return decode_ack(data)
     return decode_runtime_report(data)
