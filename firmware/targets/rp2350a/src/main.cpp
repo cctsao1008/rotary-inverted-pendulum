@@ -1,9 +1,74 @@
 #include <cstdint>
 
+#include "rip/commissioning.hpp"
 #include "rip/config.hpp"
+#include "rip/maintenance.hpp"
 #include "rip/platform.hpp"
 #include "rip/runtime.hpp"
 #include "rip/usb.hpp"
+
+namespace {
+
+void service_commissioning(rip::ControlRuntime& runtime, rip::MaintenanceAuthority& maintenance) {
+    rip::commissioning::Request request{};
+    while (rip::commissioning::take_request(request)) {
+        const std::uint64_t now_us = rip::platform::now_us();
+        switch (request.command) {
+            case rip::commissioning::Command::GetStatus: {
+                const std::uint32_t detail =
+                    static_cast<std::uint32_t>(runtime.runtime_state()) |
+                    (static_cast<std::uint32_t>(runtime.authority_mode()) << 8) |
+                    (maintenance.active() ? (1u << 16) : 0u);
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, detail,
+                                               maintenance.command().command, 0.0f);
+                break;
+            }
+            case rip::commissioning::Command::TelemetryOn:
+                rip::usb::set_telemetry_enabled(true);
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
+                break;
+            case rip::commissioning::Command::TelemetryOff:
+                rip::usb::set_telemetry_enabled(false);
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
+                break;
+            case rip::commissioning::Command::MaintenanceEnter:
+                if (runtime.runtime_state() == rip::RuntimeState::Ready &&
+                    runtime.authority_mode() == rip::AuthorityMode::Disarmed) {
+                    maintenance.enter(now_us);
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
+                } else {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Denied);
+                }
+                break;
+            case rip::commissioning::Command::MaintenanceExit:
+                maintenance.exit();
+                rip::platform::safe_off();
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
+                break;
+            case rip::commissioning::Command::SetMotorCommand:
+                if (!maintenance.active()) {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Denied);
+                } else if (!maintenance.set_command(request.value0, now_us, request.duration_ms)) {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Range);
+                } else {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, 0,
+                                                   maintenance.command().command, 0.0f);
+                }
+                break;
+            case rip::commissioning::Command::SafeOff:
+                maintenance.exit();
+                rip::platform::safe_off();
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
+                break;
+            default:
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Invalid);
+                break;
+        }
+    }
+    rip::commissioning::service();
+}
+
+}  // namespace
 
 int main() {
     rip::platform::init();
@@ -20,10 +85,11 @@ int main() {
     rip::ControlWatchdog control_watchdog(rip::config::kControlWatchdogTimeoutUs);
     rip::MeasurementAdapter adapter;
     rip::ControlRuntime runtime;
+    rip::MaintenanceAuthority maintenance;
 
-    // Keep the physical-authority policy aligned with main: the full sensing,
-    // estimator, hybrid-control, actuator-model and TB6612 paths exist, but no
-    // automatic closed-loop request is made at boot.
+    // Keep automatic closed-loop authority aligned with main. Maintenance
+    // commissioning is a separate bounded HID-requested mode and is never
+    // entered implicitly at boot.
 
     rip::RuntimeSnapshot snapshot{};
     rip::usb::set_snapshot_source(&snapshot);
@@ -34,6 +100,8 @@ int main() {
 
     while (true) {
         rip::usb::task();
+        service_commissioning(runtime, maintenance);
+
         const rip::platform::SchedulerEvidence scheduler = rip::platform::wait_next_opportunity();
         const std::uint64_t cycle_started = rip::platform::now_us();
 
@@ -64,15 +132,22 @@ int main() {
 
         const rip::ControlCycle cycle = runtime.step(observation);
         if (cycle.kind != rip::ControlCycle::Kind::Error) {
-            // Match the STM32 target: the software watchdog is kicked only after
-            // one successfully serviced runtime opportunity.
             control_watchdog.kick(captured_at);
         }
 
-        // Physical output is reachable only through an AuthorizedActuation
-        // result. With the main-equivalent boot policy this remains safe-off.
-        if (cycle.kind == rip::ControlCycle::Kind::Computed && cycle.authorized) {
-            rip::platform::apply_tb6612(rip::map_tb6612(cycle.bounded_command));
+        maintenance.tick(captured_at);
+        rip::BoundedActuatorCommand applied_command{};
+        rip::AuthorityMode applied_authority = runtime.authority_mode();
+
+        if (cycle.kind == rip::ControlCycle::Kind::Computed && cycle.authorized &&
+            !maintenance.active()) {
+            applied_command = cycle.bounded_command;
+            rip::platform::apply_tb6612(rip::map_tb6612(applied_command));
+        } else if (maintenance.active() && runtime.runtime_state() == rip::RuntimeState::Ready &&
+                   runtime.authority_mode() == rip::AuthorityMode::Disarmed) {
+            applied_command = maintenance.command();
+            applied_authority = rip::AuthorityMode::Maintenance;
+            rip::platform::apply_tb6612(rip::map_tb6612(applied_command));
         } else {
             rip::platform::safe_off();
         }
@@ -83,16 +158,15 @@ int main() {
         snapshot.arm_encoder_count = raw.arm_encoder.accumulated_count;
         snapshot.regime = runtime.regime();
         snapshot.runtime_state = runtime.runtime_state();
-        snapshot.authority_mode = runtime.authority_mode();
+        snapshot.authority_mode = applied_authority;
         snapshot.missed_opportunities = scheduler.missed_opportunities;
         snapshot.deadline_overruns = scheduler.deadline_overruns;
         if (cycle.kind == rip::ControlCycle::Kind::Computed) {
             snapshot.state = cycle.state;
             snapshot.demand = cycle.demand;
-            snapshot.command = cycle.bounded_command;
         }
+        snapshot.command = applied_command;
 
-        // Critical-path accounting ends before USB CDC/HID background service.
         const std::uint64_t cycle_finished = rip::platform::now_us();
         snapshot.execution_time_us = static_cast<std::uint32_t>(cycle_finished - cycle_started);
 
@@ -104,5 +178,6 @@ int main() {
 
         rip::platform::watchdog_feed();
         rip::usb::task();
+        service_commissioning(runtime, maintenance);
     }
 }
