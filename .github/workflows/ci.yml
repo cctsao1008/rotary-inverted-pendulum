@@ -20,14 +20,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          targets: thumbv7m-none-eabi
+          targets: thumbv7m-none-eabi, thumbv8m.main-none-eabihf
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Format
         run: cargo fmt --all -- --check
       - name: Workspace check
-        run: cargo check --workspace --exclude rip-firmware-stm32f103 --all-targets
+        run: cargo check --workspace --exclude rip-firmware-stm32f103 --exclude rip-firmware-rp2350a --all-targets
       - name: Host tests
         run: cargo test-host
       - name: Parameter provenance consistency
@@ -134,9 +134,11 @@ jobs:
             --system-identifier rotary-inverted-pendulum \
             --git-commit "$GITHUB_SHA"
       - name: Clippy
-        run: cargo clippy --workspace --exclude rip-firmware-stm32f103 --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude rip-firmware-stm32f103 --exclude rip-firmware-rp2350a --all-targets -- -D warnings
       - name: STM32F103 release build
         run: cargo build-stm32f103
+      - name: RP2350A release build
+        run: cargo build-rp2350a
 
   rigid-body:
     runs-on: ubuntu-latest
