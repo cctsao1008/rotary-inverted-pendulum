@@ -10,7 +10,8 @@ namespace rip {
 bool MaintenanceAuthority::enter(std::uint64_t now_us) {
     active_ = true;
     last_update_us_ = now_us;
-    lease_deadline_us_ = now_us;
+    lease_deadline_us_ =
+        now_us + static_cast<std::uint64_t>(config::kMaintenanceDefaultLeaseMs) * 1000u;
     command_ = {};
     return true;
 }
