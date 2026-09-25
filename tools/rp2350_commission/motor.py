@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import statistics
 import time
 
@@ -12,7 +11,7 @@ def confirm_active_test(name: str, max_command: float, assume_yes: bool) -> None
     if assume_yes:
         return
     answer = input(
-        f"{name}: this test requests bounded motor output up to {max_command:.2f}. "
+        f"{name}: this test requests motor output up to {max_command:.2f}. "
         "Keep the mechanism clear and the pendulum free. Continue? [y/N] "
     ).strip().lower()
     if answer not in {"y", "yes"}:
@@ -55,7 +54,6 @@ def motor_direction(
     device.start_telemetry()
     with RunRecorder("motor-direction") as recorder:
         recorder.write_metadata({"test": "motor-direction", "command": command, "hold_s": hold_s})
-        device.maintenance_enter()
         try:
             _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-pre")
             positive = _run_command_segment(device, recorder, abs(command), hold_s, tag="positive")
@@ -63,10 +61,7 @@ def motor_direction(
             negative = _run_command_segment(device, recorder, -abs(command), hold_s, tag="negative")
             _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-post")
         finally:
-            try:
-                device.safe_off()
-            finally:
-                device.maintenance_exit()
+            device.safe_off()
 
         if len(positive) < 2 or len(negative) < 2:
             raise RuntimeError("insufficient telemetry during direction test")
@@ -99,7 +94,6 @@ def speed_sweep(
     results: list[dict[str, float]] = []
     with RunRecorder("speed-sweep") as recorder:
         recorder.write_metadata({"test": "speed-sweep", "commands": commands, "hold_s": hold_s})
-        device.maintenance_enter()
         try:
             _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-pre")
             for command in commands:
@@ -117,10 +111,7 @@ def speed_sweep(
                     )
                 _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-between")
         finally:
-            try:
-                device.safe_off()
-            finally:
-                device.maintenance_exit()
+            device.safe_off()
 
         summary = {
             "test": "speed-sweep",
@@ -154,7 +145,6 @@ def position_step(
             {"test": "position-step", "delta_rad": delta_rad, "kp": kp, "kd": kd,
              "max_command": max_command, "origin_rad": origin}
         )
-        device.maintenance_enter()
         target_results = []
         try:
             for index, target in enumerate(targets):
@@ -182,10 +172,7 @@ def position_step(
                     }
                 )
         finally:
-            try:
-                device.safe_off()
-            finally:
-                device.maintenance_exit()
+            device.safe_off()
 
         summary = {
             "test": "position-step",
