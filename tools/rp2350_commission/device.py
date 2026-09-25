@@ -146,9 +146,5 @@ class Rp2350Device:
         self.command(HidCommand.SAFE_OFF)
 
     def set_motor_command(self, value: float, *, lease_ms: int = 250) -> float:
-        ack = self.command(
-            HidCommand.SET_MOTOR_COMMAND,
-            value0=value,
-            duration_ms=lease_ms,
-        )
+        ack = self.command(HidCommand.SET_MOTOR_COMMAND, value0=value, duration_ms=lease_ms)
         return ack.value0
