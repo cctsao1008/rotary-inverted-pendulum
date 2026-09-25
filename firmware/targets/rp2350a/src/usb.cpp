@@ -187,13 +187,3 @@ extern "C" std::uint16_t tud_hid_get_report_cb(std::uint8_t instance, std::uint8
     (void)reqlen;
     return 0;
 }
-
-extern "C" void tud_hid_set_report_cb(std::uint8_t instance, std::uint8_t report_id,
-                                       hid_report_type_t report_type,
-                                       std::uint8_t const* buffer, std::uint16_t bufsize) {
-    (void)instance;
-    (void)report_id;
-    (void)report_type;
-    (void)buffer;
-    (void)bufsize;
-}
