@@ -98,10 +98,6 @@ int main() {
     rip::ControlRuntime runtime;
     CommissioningMotor commissioning_motor;
 
-    // The production control path remains available, but host commissioning is
-    // intentionally simple: SET_MOTOR_COMMAND is a direct normalized test input
-    // with only a range check and a short timeout.
-
     rip::RuntimeSnapshot snapshot{};
     rip::usb::set_snapshot_source(&snapshot);
     rip::usb::log("boot,target=rp2350a,board=uno_rp2350,runtime=feature-parity,motor_command=0\r\n");
