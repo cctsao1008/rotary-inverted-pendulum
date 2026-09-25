@@ -94,7 +94,7 @@ void task() {
     if (tud_cdc_connected() && !g_cdc_announced) {
         g_cdc_announced = true;
 #if RIP_ENABLE_CDC_LOG
-        cdc_write("boot,target=rp2350a,board=uno_rp2350,runtime=feature-parity,motor_authority=0\r\n");
+        cdc_write("boot,target=rp2350a,board=uno_rp2350,runtime=feature-parity,closed_loop=0\r\n");
 #endif
     } else if (!tud_cdc_connected()) {
         g_cdc_announced = false;
@@ -126,7 +126,7 @@ void log_status(const RuntimeSnapshot& snapshot) {
     std::snprintf(buffer, sizeof(buffer),
                   "status,t_us=%llu,sample=%lu,adc=%u,enc_a=%u,enc_b=%u,enc=%ld,theta=%.6f,theta_dot=%.6f,"
                   "phi=%.6f,phi_dot=%.6f,regime=%s,runtime=%s,torque_nm=%.6f,cmd=%.6f,"
-                  "missed=%lu,overrun=%lu,exec_us=%lu,telemetry=%u,motor_authority=%u\r\n",
+                  "missed=%lu,overrun=%lu,exec_us=%lu,telemetry=%u,closed_loop=%u\r\n",
                   static_cast<unsigned long long>(snapshot.timestamp_us),
                   static_cast<unsigned long>(snapshot.sample_index),
                   static_cast<unsigned>(snapshot.pendulum_adc_raw),
