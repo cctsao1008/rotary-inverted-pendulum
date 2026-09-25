@@ -23,7 +23,6 @@ inline constexpr std::uint64_t kSensorLateAfterUs = 5000;
 inline constexpr std::uint64_t kSensorTimeoutAfterUs = 20000;
 inline constexpr std::uint64_t kControlWatchdogTimeoutUs = 20000;
 
-// Reference-backed live-shadow controller parameters retained from the STM32 target.
 inline constexpr float kPendulumMassKg = 0.04f;
 inline constexpr float kPendulumComLengthM = 0.129f;
 inline constexpr float kPendulumInertiaKgM2 = 0.0001f;
@@ -48,15 +47,10 @@ inline constexpr float kLqrGains[4] = {-0.18355f, -0.01585f, -0.01120f, -0.00745
 inline constexpr float kActuatorTorquePerEffectiveCommandNm = 0.05f;
 inline constexpr float kActuatorCommandDeadzone = 0.0f;
 
-// Commissioning motor commands are direct normalized test inputs. Keep only a
-// range check and a short timeout so host-side step/chirp/PRBS waveforms are
-// not distorted by another firmware-side limiter.
 inline constexpr float kCommissioningMaxAbsCommand = 1.0f;
 inline constexpr std::uint32_t kCommissioningDefaultLeaseMs = 250;
 inline constexpr std::uint32_t kCommissioningMaxLeaseMs = 1000;
 
-// 100 Hz is intentionally well below the 1 kHz control loop while retaining
-// enough temporal resolution for motor/encoder/ADC characterization.
 inline constexpr std::uint32_t kTelemetryRateHz = 100;
 inline constexpr std::uint32_t kTelemetryPeriodTicks = kControlTickHz / kTelemetryRateHz;
 
