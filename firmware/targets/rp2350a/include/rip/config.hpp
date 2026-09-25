@@ -48,7 +48,17 @@ inline constexpr float kLqrGains[4] = {-0.18355f, -0.01585f, -0.01120f, -0.00745
 inline constexpr float kActuatorTorquePerEffectiveCommandNm = 0.05f;
 inline constexpr float kActuatorCommandDeadzone = 0.0f;
 
-inline constexpr std::uint32_t kTelemetryRateHz = 10;
+// HID commissioning authority is bounded independently from closed-loop control.
+// A host command must be refreshed before its lease expires or firmware returns
+// the bridge to safe-off automatically.
+inline constexpr float kMaintenanceMaxAbsCommand = 0.50f;
+inline constexpr float kMaintenanceMaxSlewPerSec = 2.0f;
+inline constexpr std::uint32_t kMaintenanceDefaultLeaseMs = 250;
+inline constexpr std::uint32_t kMaintenanceMaxLeaseMs = 500;
+
+// 100 Hz is intentionally well below the 1 kHz control loop while retaining
+// enough temporal resolution for motor/encoder/ADC characterization.
+inline constexpr std::uint32_t kTelemetryRateHz = 100;
 inline constexpr std::uint32_t kTelemetryPeriodTicks = kControlTickHz / kTelemetryRateHz;
 
 }  // namespace rip::config
