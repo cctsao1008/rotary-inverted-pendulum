@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "rip/platform.hpp"
 #include "tusb.h"
 
 #ifndef RIP_ENABLE_CDC_LOG
@@ -40,7 +41,9 @@ struct HidRuntimeReport {
     std::uint8_t regime;
     std::uint8_t runtime_state;
     std::uint8_t authority_mode;
-    std::uint8_t reserved[3];
+    std::uint8_t encoder_a;
+    std::uint8_t encoder_b;
+    std::uint8_t reserved;
 };
 #pragma pack(pop)
 static_assert(sizeof(HidRuntimeReport) == 64);
@@ -119,14 +122,16 @@ void log(const char* text) {
 }
 
 void log_status(const RuntimeSnapshot& snapshot) {
-    char buffer[320];
+    char buffer[352];
     std::snprintf(buffer, sizeof(buffer),
-                  "status,t_us=%llu,sample=%lu,adc=%u,enc=%ld,theta=%.6f,theta_dot=%.6f,"
+                  "status,t_us=%llu,sample=%lu,adc=%u,enc_a=%u,enc_b=%u,enc=%ld,theta=%.6f,theta_dot=%.6f,"
                   "phi=%.6f,phi_dot=%.6f,regime=%s,runtime=%s,torque_nm=%.6f,cmd=%.6f,"
                   "missed=%lu,overrun=%lu,exec_us=%lu,telemetry=%u,motor_authority=%u\r\n",
                   static_cast<unsigned long long>(snapshot.timestamp_us),
                   static_cast<unsigned long>(snapshot.sample_index),
                   static_cast<unsigned>(snapshot.pendulum_adc_raw),
+                  platform::read_arm_encoder_a() ? 1u : 0u,
+                  platform::read_arm_encoder_b() ? 1u : 0u,
                   static_cast<long>(snapshot.arm_encoder_count),
                   static_cast<double>(snapshot.state.theta),
                   static_cast<double>(snapshot.state.theta_dot),
@@ -165,6 +170,8 @@ bool send_hid_snapshot(const RuntimeSnapshot& snapshot) {
     report.regime = static_cast<std::uint8_t>(snapshot.regime);
     report.runtime_state = static_cast<std::uint8_t>(snapshot.runtime_state);
     report.authority_mode = static_cast<std::uint8_t>(snapshot.authority_mode);
+    report.encoder_a = platform::read_arm_encoder_a() ? 1u : 0u;
+    report.encoder_b = platform::read_arm_encoder_b() ? 1u : 0u;
     return tud_hid_report(0, &report, sizeof(report));
 }
 
