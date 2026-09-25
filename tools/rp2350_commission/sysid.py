@@ -5,7 +5,6 @@ import random
 import time
 
 from device import Rp2350Device
-from motor import confirm_active_test
 from recording import RunRecorder
 
 
@@ -47,12 +46,12 @@ def step_response(
     *,
     amplitude: float = 0.10,
     hold_s: float = 1.5,
-    assume_yes: bool = False,
 ) -> dict[str, object]:
-    confirm_active_test("step-response", abs(amplitude), assume_yes)
     device.start_telemetry()
     with RunRecorder("step-response") as recorder:
-        recorder.write_metadata({"test": "step-response", "amplitude": amplitude, "hold_s": hold_s})
+        recorder.write_metadata(
+            {"test": "step-response", "amplitude": amplitude, "hold_s": hold_s}
+        )
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, lambda _: amplitude, hold_s, tag="positive-step")
@@ -61,7 +60,11 @@ def step_response(
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
             device.safe_off()
-        summary = {"test": "step-response", "amplitude": amplitude, "artifact_dir": str(recorder.directory)}
+        summary = {
+            "test": "step-response",
+            "amplitude": amplitude,
+            "artifact_dir": str(recorder.directory),
+        }
         recorder.write_summary(summary)
         return summary
 
@@ -73,9 +76,7 @@ def chirp(
     f0_hz: float = 0.2,
     f1_hz: float = 8.0,
     duration_s: float = 20.0,
-    assume_yes: bool = False,
 ) -> dict[str, object]:
-    confirm_active_test("chirp", abs(amplitude), assume_yes)
     device.start_telemetry()
     ratio = f1_hz / f0_hz
 
@@ -88,7 +89,15 @@ def chirp(
         return amplitude * math.sin(phase)
 
     with RunRecorder("chirp") as recorder:
-        recorder.write_metadata({"test": "chirp", "amplitude": amplitude, "f0_hz": f0_hz, "f1_hz": f1_hz, "duration_s": duration_s})
+        recorder.write_metadata(
+            {
+                "test": "chirp",
+                "amplitude": amplitude,
+                "f0_hz": f0_hz,
+                "f1_hz": f1_hz,
+                "duration_s": duration_s,
+            }
+        )
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, command_at, duration_s, tag="chirp")
@@ -107,9 +116,7 @@ def prbs(
     interval_s: float = 0.20,
     duration_s: float = 20.0,
     seed: int = 1,
-    assume_yes: bool = False,
 ) -> dict[str, object]:
-    confirm_active_test("prbs", abs(amplitude), assume_yes)
     device.start_telemetry()
     rng = random.Random(seed)
     values: dict[int, float] = {}
@@ -121,7 +128,15 @@ def prbs(
         return values[index]
 
     with RunRecorder("prbs") as recorder:
-        recorder.write_metadata({"test": "prbs", "amplitude": amplitude, "interval_s": interval_s, "duration_s": duration_s, "seed": seed})
+        recorder.write_metadata(
+            {
+                "test": "prbs",
+                "amplitude": amplitude,
+                "interval_s": interval_s,
+                "duration_s": duration_s,
+                "seed": seed,
+            }
+        )
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, command_at, duration_s, tag="prbs")
