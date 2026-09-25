@@ -37,6 +37,7 @@ jobs:
           g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
             -Ifirmware/targets/rp2350a/include \
             firmware/targets/rp2350a/src/runtime.cpp \
+            firmware/targets/rp2350a/src/maintenance.cpp \
             firmware/targets/rp2350a/tests/runtime_core_test.cpp \
             -o /tmp/rp2350a-runtime-core-test
           /tmp/rp2350a-runtime-core-test
