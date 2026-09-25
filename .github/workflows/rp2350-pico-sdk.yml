@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "firmware/targets/rp2350a/**"
+      - "tools/rp2350_commission/**"
       - ".github/workflows/rp2350-pico-sdk.yml"
   pull_request:
     paths:
       - "firmware/targets/rp2350a/**"
+      - "tools/rp2350_commission/**"
       - ".github/workflows/rp2350-pico-sdk.yml"
 
 permissions:
@@ -24,6 +26,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate commissioning Python modules
+        run: |
+          python3 -m compileall -q tools/rp2350_commission
+          PYTHONPATH=tools/rp2350_commission python3 -c "import protocol; assert protocol.HID_REPORT_SIZE == 64"
 
       - name: Run native runtime semantic checks
         run: |
