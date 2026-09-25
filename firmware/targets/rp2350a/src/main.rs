@@ -3,7 +3,9 @@
 
 use embedded_hal::digital::OutputPin;
 use panic_halt as _;
-use rip_assembly_rp2350_uno_balance::{board_mapping_is_consistent, CONTROL_OUTPUT_DEFAULT_ENABLED};
+use rip_assembly_rp2350_uno_balance::{
+    board_mapping_is_consistent, CONTROL_OUTPUT_DEFAULT_ENABLED,
+};
 use rip_board_uno_rp2350::XTAL_FREQ_HZ;
 use rp235x_hal as hal;
 
