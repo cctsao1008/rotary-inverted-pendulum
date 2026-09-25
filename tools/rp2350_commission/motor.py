@@ -228,3 +228,124 @@ def position_step(
         }
         recorder.write_summary(summary)
         return summary
+
+
+def breakaway(
+    device: Rp2350Device,
+    *,
+    step: float = 0.01,
+    max_command: float = 0.30,
+    hold_s: float = 0.50,
+    min_counts: int = 4,
+) -> dict[str, object]:
+    """Ramp command in each direction and report the first level that moves the arm."""
+    if step <= 0.0 or max_command <= 0.0 or hold_s <= 0.0:
+        raise ValueError("step, max_command, and hold_s must be > 0")
+    if min_counts <= 0:
+        raise ValueError("min_counts must be > 0")
+
+    device.start_telemetry()
+    points: list[dict[str, object]] = []
+
+    with RunRecorder("breakaway") as recorder:
+        recorder.write_metadata(
+            {
+                "test": "breakaway",
+                "step": step,
+                "max_command": max_command,
+                "hold_s": hold_s,
+                "min_counts": min_counts,
+            }
+        )
+
+        def sweep(sign: float) -> dict[str, object] | None:
+            level = step
+            while level <= max_command + 1.0e-9:
+                command = sign * level
+                samples = _run_command_segment(
+                    device,
+                    recorder,
+                    command,
+                    hold_s,
+                    tag=f"breakaway-{command:+.3f}",
+                )
+                if len(samples) >= 2:
+                    count_delta = samples[-1].arm_encoder_count - samples[0].arm_encoder_count
+                    mean_speed = statistics.fmean(s.phi_dot for s in samples)
+                    point = {
+                        "command": command,
+                        "count_delta": count_delta,
+                        "mean_phi_dot_rad_s": mean_speed,
+                    }
+                    points.append(point)
+                    if abs(count_delta) >= min_counts:
+                        return point
+                level += step
+            return None
+
+        try:
+            _run_command_segment(device, recorder, 0.0, 0.50, tag="zero-pre")
+            positive = sweep(+1.0)
+            _run_command_segment(device, recorder, 0.0, 0.75, tag="zero-mid")
+            negative = sweep(-1.0)
+            _run_command_segment(device, recorder, 0.0, 0.50, tag="zero-post")
+        finally:
+            device.safe_off()
+
+        summary = {
+            "test": "breakaway",
+            "positive": positive,
+            "negative": negative,
+            "points": points,
+            "artifact_dir": str(recorder.directory),
+        }
+        recorder.write_summary(summary)
+        return summary
+
+
+def coast_down(
+    device: Rp2350Device,
+    *,
+    command: float = 0.20,
+    runup_s: float = 2.0,
+    coast_s: float = 5.0,
+) -> dict[str, object]:
+    """Drive the arm, then command zero and record the mechanical coast-down trace."""
+    if command == 0.0:
+        raise ValueError("command must be non-zero")
+    if runup_s <= 0.0 or coast_s <= 0.0:
+        raise ValueError("runup_s and coast_s must be > 0")
+
+    device.start_telemetry()
+    with RunRecorder("coast-down") as recorder:
+        recorder.write_metadata(
+            {
+                "test": "coast-down",
+                "command": command,
+                "runup_s": runup_s,
+                "coast_s": coast_s,
+            }
+        )
+        try:
+            _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-pre")
+            runup = _run_command_segment(device, recorder, command, runup_s, tag="runup")
+            coast = _run_command_segment(device, recorder, 0.0, coast_s, tag="coast")
+        finally:
+            device.safe_off()
+
+        if not runup or not coast:
+            raise RuntimeError("insufficient telemetry during coast-down test")
+
+        runup_tail = runup[len(runup) // 2 :]
+        summary = {
+            "test": "coast-down",
+            "command": command,
+            "runup_mean_phi_dot_rad_s": statistics.fmean(s.phi_dot for s in runup_tail),
+            "coast_start_phi_dot_rad_s": coast[0].phi_dot,
+            "coast_end_phi_dot_rad_s": coast[-1].phi_dot,
+            "coast_peak_abs_phi_dot_rad_s": max(abs(s.phi_dot) for s in coast),
+            "coast_duration_s": coast_s,
+            "artifact_dir": str(recorder.directory),
+        }
+        recorder.write_summary(summary)
+        return summary
