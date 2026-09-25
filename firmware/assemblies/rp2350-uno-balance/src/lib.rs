@@ -110,10 +110,22 @@ mod tests {
     #[test]
     fn mechanism_harness_selects_motor_a_and_encoder1() {
         assert_eq!(ROTARY_ARM_CHANNEL, ShieldMotorChannel::A);
-        assert_eq!(ARM_MOTOR_ENCODER_HARNESS[0].shield_signal, ShieldSignal::MaPlus);
-        assert_eq!(ARM_MOTOR_ENCODER_HARNESS[2].shield_signal, ShieldSignal::Encoder1A);
-        assert_eq!(ARM_MOTOR_ENCODER_HARNESS[3].shield_signal, ShieldSignal::Encoder1B);
-        assert_eq!(ARM_MOTOR_ENCODER_HARNESS[5].shield_signal, ShieldSignal::MaMinus);
+        assert_eq!(
+            ARM_MOTOR_ENCODER_HARNESS[0].shield_signal,
+            ShieldSignal::MaPlus
+        );
+        assert_eq!(
+            ARM_MOTOR_ENCODER_HARNESS[2].shield_signal,
+            ShieldSignal::Encoder1A
+        );
+        assert_eq!(
+            ARM_MOTOR_ENCODER_HARNESS[3].shield_signal,
+            ShieldSignal::Encoder1B
+        );
+        assert_eq!(
+            ARM_MOTOR_ENCODER_HARNESS[5].shield_signal,
+            ShieldSignal::MaMinus
+        );
     }
 
     #[test]
