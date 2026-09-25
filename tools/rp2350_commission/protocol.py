@@ -42,16 +42,20 @@ class HidCommand(IntEnum):
     SAFE_OFF = 0x13
 
 
-# Current firmware input report. The final three bytes were reserved in the
-# original feature-parity image; two now carry raw Encoder1 A/B states.
-_RUNTIME = struct.Struct("<BBHQIHiffffffIIIBBBBBB")
-assert _RUNTIME.size == HID_REPORT_SIZE
+class HidStatus(IntEnum):
+    OK = 0
+    INVALID = 1
+    DENIED = 2
+    RANGE = 3
+    BUSY = 4
 
-# Reserved host->device command layout. Firmware command acknowledgement is a
-# commissioning capability and is intentionally versioned independently from
-# the runtime telemetry layout.
+
+_RUNTIME = struct.Struct("<BBHQIHiffffffIIIBBBBBB")
 _COMMAND = struct.Struct("<BBBBIffII40s")
+_ACK = struct.Struct("<BBBBIQffI36s")
+assert _RUNTIME.size == HID_REPORT_SIZE
 assert _COMMAND.size == HID_REPORT_SIZE
+assert _ACK.size == HID_REPORT_SIZE
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,23 @@ class TelemetrySample:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class CommandAck:
+    version: int
+    message_type: int
+    command: int
+    status: int
+    sequence: int
+    timestamp_us: int
+    value0: float
+    value1: float
+    detail: int
+
+    @property
+    def ok(self) -> bool:
+        return self.status == int(HidStatus.OK)
+
+
 def decode_runtime_report(data: bytes) -> TelemetrySample:
     if len(data) != HID_REPORT_SIZE:
         raise ValueError(f"expected {HID_REPORT_SIZE} HID bytes, got {len(data)}")
@@ -94,6 +115,25 @@ def decode_runtime_report(data: bytes) -> TelemetrySample:
     if sample.schema != HID_SCHEMA:
         raise ValueError(f"unsupported HID telemetry schema {sample.schema}")
     return sample
+
+
+def decode_ack(data: bytes) -> CommandAck:
+    if len(data) != HID_REPORT_SIZE:
+        raise ValueError(f"expected {HID_REPORT_SIZE} HID bytes, got {len(data)}")
+    values = _ACK.unpack(data)
+    ack = CommandAck(*values[:-1])
+    if ack.version != HID_SCHEMA or ack.message_type != 0x81:
+        raise ValueError("not a commissioning acknowledgement report")
+    return ack
+
+
+def decode_device_report(data: bytes) -> TelemetrySample | CommandAck:
+    # Legacy/current runtime telemetry uses byte 1 as low-valued flags; the
+    # commissioning acknowledgement reserves 0x81, so the layouts are
+    # unambiguous without changing the existing telemetry ABI.
+    if len(data) == HID_REPORT_SIZE and data[1] == 0x81:
+        return decode_ack(data)
+    return decode_runtime_report(data)
 
 
 def encode_command(
