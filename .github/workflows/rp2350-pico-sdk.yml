@@ -61,3 +61,14 @@ jobs:
           test -f build/rp2350a/rip_rp2350a.elf
           test -f build/rp2350a/rip_rp2350a.bin
           test -f build/rp2350a/rip_rp2350a.uf2
+
+      - name: Upload stage-0 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: rp2350a-stage0
+          path: |
+            build/rp2350a/rip_rp2350a.elf
+            build/rp2350a/rip_rp2350a.bin
+            build/rp2350a/rip_rp2350a.uf2
+          if-no-files-found: error
+          retention-days: 14
