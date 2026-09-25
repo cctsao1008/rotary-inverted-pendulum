@@ -13,8 +13,13 @@ from protocol import CommandAck, HidCommand, HidStatus, TelemetrySample, encode_
 class Rp2350Device:
     """One host session spanning the RP2350 HID and CDC interfaces."""
 
-    def __init__(self, *, hid_path: str | bytes | None = None, cdc_port: str | None = None,
-                 require_cdc: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        hid_path: str | bytes | None = None,
+        cdc_port: str | None = None,
+        require_cdc: bool = False,
+    ) -> None:
         self.hid = HidTransport(path=hid_path)
         self.cdc = CdcTransport(port=cdc_port)
         self.require_cdc = require_cdc
@@ -56,11 +61,25 @@ class Rp2350Device:
             self._sequence = 1
         return sequence
 
-    def command(self, command: HidCommand, *, value0: float = 0.0, value1: float = 0.0,
-                duration_ms: int = 0, timeout_s: float = 1.0) -> CommandAck:
+    def command(
+        self,
+        command: HidCommand,
+        *,
+        value0: float = 0.0,
+        value1: float = 0.0,
+        duration_ms: int = 0,
+        timeout_s: float = 1.0,
+    ) -> CommandAck:
         sequence = self._next_sequence()
-        self.hid.write_report(encode_command(command, sequence, value0=value0, value1=value1,
-                                             duration_ms=duration_ms))
+        self.hid.write_report(
+            encode_command(
+                command,
+                sequence,
+                value0=value0,
+                value1=value1,
+                duration_ms=duration_ms,
+            )
+        )
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             report = self.hid.read_report(100)
@@ -88,7 +107,15 @@ class Rp2350Device:
 
     def status(self) -> dict[str, object]:
         ack = self.command(HidCommand.GET_STATUS)
-        return {"hid": asdict(ack), "cdc": self.cdc.command("status") if self.cdc_available else []}
+        detail = ack.detail
+        return {
+            "runtime_state": detail & 0xFF,
+            "control_mode": (detail >> 8) & 0xFF,
+            "direct_motor_active": bool(detail & (1 << 16)),
+            "motor_command": ack.value0,
+            "timestamp_us": ack.timestamp_us,
+            "cdc": self.cdc.command("status") if self.cdc_available else [],
+        }
 
     def start_telemetry(self) -> None:
         self.command(HidCommand.TELEMETRY_ON)
@@ -124,4 +151,8 @@ class Rp2350Device:
         self.command(HidCommand.SAFE_OFF)
 
     def set_motor_command(self, value: float, *, lease_ms: int = 250) -> float:
-        return self.command(HidCommand.SET_MOTOR_COMMAND, value0=value, duration_ms=lease_ms).value0
+        return self.command(
+            HidCommand.SET_MOTOR_COMMAND,
+            value0=value,
+            duration_ms=lease_ms,
+        ).value0
