@@ -80,9 +80,9 @@ USB is a TinyUSB composite device:
 ```text
 USB
 ├── CDC ACM
-│   └── debug / commissioning console
+│   └── human-readable debug / status console
 └── vendor HID (64-byte report)
-    └── deterministic runtime telemetry snapshot
+    └── machine-readable runtime telemetry and commissioning protocol
 ```
 
 CDC commands:
@@ -95,7 +95,15 @@ telemetry on
 telemetry off
 ```
 
-HID telemetry defaults off, preserving the existing assembly policy, and is explicitly enabled by the host. The HID report includes raw ADC, encoder count, estimated state, regime, torque demand, bounded command and timing evidence.
+HID telemetry defaults off, preserving the existing assembly policy, and is explicitly enabled by the host. The report includes raw ADC, Encoder1 A/B logic states, accumulated encoder count, estimated state, regime, torque demand, command evidence and timing evidence. The telemetry rate is 100 Hz while the runtime remains 1 kHz.
+
+The corresponding host-side entry point is:
+
+```bash
+python tools/rp2350_commission/rp2350_commission.py <command>
+```
+
+`tools/rp2350_commission/` keeps CDC and HID transport, protocol handling, passive sensor checks, motor characterization, position tests, SysID excitation and evidence recording in one folder while exposing one CLI.
 
 Unsolicited CDC debug output can be disabled without removing the CDC console:
 
@@ -130,16 +138,16 @@ build/rp2350a/rip_rp2350a.bin
 build/rp2350a/rip_rp2350a.uf2
 ```
 
-CI also compiles and executes native C++ semantic checks for measurement mapping, circular-angle estimation, hybrid regime transition, actuator mapping and command-safety slew behavior before building the RP2350 image.
+CI also compiles the host commissioning Python modules, executes native C++ semantic checks for measurement mapping, circular-angle estimation, hybrid regime transition, actuator mapping and command-safety slew behavior, and then builds the RP2350 image.
 
 ## Physical commissioning follows software parity
 
-The finished firmware is intended to be present before physical characterization. Hardware commissioning will then determine specimen-specific facts rather than gate implementation:
+The finished firmware is intended to be present before physical characterization. Hardware commissioning then determines specimen-specific facts rather than gating implementation:
 
-1. verify shield power domains and RP2350 logic compatibility;
-2. read and calibrate the physical pendulum ADC range;
-3. verify encoder direction/count scale and measure arm position/velocity;
-4. characterize motor sign, dead zone, speed response and position response;
-5. promote bounded physical motor authority only after those results justify it.
+1. observe pendulum ADC raw range and establish specimen calibration;
+2. rotate the arm under bounded command while reading Encoder1 A/B, accumulated count, arm position and velocity;
+3. establish motor/encoder sign conventions;
+4. characterize motor dead zone, command-to-speed response and position response;
+5. record step/chirp/PRBS evidence for SysID and later controller tuning.
 
-The three known electrical checks remain mandatory before powered integration: encoder output HIGH level, shield `VCC50` interaction with the UNO power header, and TB6612 recognition of 3.3 V RP2350 logic HIGH.
+Shield power-domain compatibility remains a hardware integration constraint, but encoder A/B validation is performed as part of the live motor/encoder commissioning sequence rather than as a separate pre-test gate.
