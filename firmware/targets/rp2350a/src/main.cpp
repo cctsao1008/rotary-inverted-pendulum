@@ -31,8 +31,12 @@ void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& mot
                     static_cast<std::uint32_t>(runtime.runtime_state()) |
                     (static_cast<std::uint32_t>(runtime.authority_mode()) << 8) |
                     (motor.active ? (1u << 16) : 0u);
-                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, detail,
-                                               motor.command, 0.0f);
+                rip::commissioning::queue_ack(
+                    request,
+                    rip::commissioning::Status::Ok,
+                    detail,
+                    motor.command,
+                    static_cast<float>(rip::platform::encoder_illegal_transition_count()));
                 break;
             }
             case rip::commissioning::Command::TelemetryOn:
