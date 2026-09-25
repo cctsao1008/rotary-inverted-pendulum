@@ -37,6 +37,8 @@ prbs
 all
 ```
 
+`all` is the comprehensive suite: it runs status, ADC, encoder, motor direction, speed sweep, position step, open-loop step response, chirp, and PRBS in that order. Passive checks run first; one explicit operator confirmation is required before the active portion unless `--yes` is supplied.
+
 Passive and active tests use the same session and evidence format. HID OUT commands are sequence-numbered and require a firmware acknowledgement; the host fails closed on timeout or rejection rather than assuming that an output report changed hardware state.
 
 ## Transport ownership
