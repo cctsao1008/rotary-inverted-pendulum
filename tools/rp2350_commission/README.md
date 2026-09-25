@@ -32,7 +32,9 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware only checks `[-1.0, +1.0]` and expires stale commands after a short timeout. No extra commissioning mode, authority handshake, or slew limiter is involved.
+`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware only checks `[-1.0, +1.0]` and expires stale commands after a short timeout. No extra commissioning state machine, handshake, or slew limiter is involved.
+
+CDC carries human-readable `help`, `version`, `status`, debug/event text, and captured logs.
 
 Current signal mapping:
 
