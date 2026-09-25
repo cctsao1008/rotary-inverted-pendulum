@@ -1,3 +1,4 @@
 [alias]
-test-host = "test --workspace --exclude rip-firmware-stm32f103"
+test-host = "test --workspace --exclude rip-firmware-stm32f103 --exclude rip-firmware-rp2350a"
 build-stm32f103 = "build -p rip-firmware-stm32f103 --release --target thumbv7m-none-eabi"
+build-rp2350a = "build -p rip-firmware-rp2350a --release --target thumbv8m.main-none-eabihf"
