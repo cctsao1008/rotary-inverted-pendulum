@@ -15,8 +15,6 @@ std::uint16_t read_pendulum_adc();
 std::int32_t read_arm_encoder_count();
 bool read_arm_encoder_a();
 bool read_arm_encoder_b();
-std::uint32_t encoder_illegal_transition_count();
-void reset_arm_encoder_evidence();
 
 // Physical-output backend. `apply_tb6612()` always removes PWM before changing
 // bridge direction (break-before-make). `safe_off()` is unqualified.
