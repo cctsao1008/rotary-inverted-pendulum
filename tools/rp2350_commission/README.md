@@ -22,7 +22,7 @@ status  monitor  adc  encoder  motor-direction  speed-sweep
 position-step  step-response  chirp  prbs  all
 ```
 
-HID commands are intentionally minimal:
+HID commands:
 
 ```text
 GET_STATUS
@@ -32,9 +32,9 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware only checks `[-1.0, +1.0]` and expires stale commands after a short timeout. No extra commissioning state machine, handshake, or slew limiter is involved.
+`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware checks `[-1.0, +1.0]` and expires stale commands after a short timeout. No extra commissioning state, mode handshake, or slew limiter is involved.
 
-CDC carries human-readable `help`, `version`, `status`, debug/event text, and captured logs.
+CDC carries `help`, `version`, `status`, debug/event text, and captured logs.
 
 Current signal mapping:
 
