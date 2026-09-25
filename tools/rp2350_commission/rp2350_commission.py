@@ -31,6 +31,11 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("encoder")
     p.add_argument("--duration", type=float, default=5.0)
+    p.add_argument(
+        "--motor-command",
+        type=float,
+        help="optionally rotate the arm while capturing Encoder1 A/B/count",
+    )
 
     p = sub.add_parser("motor")
     p.add_argument("--command", type=float, required=True)
@@ -93,7 +98,13 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "adc":
             _print(sensors.adc(device, args.duration))
         elif args.action == "encoder":
-            _print(sensors.encoder(device, args.duration))
+            _print(
+                sensors.encoder(
+                    device,
+                    args.duration,
+                    motor_command=args.motor_command,
+                )
+            )
         elif args.action == "motor":
             _print(
                 motor.motor_command(
