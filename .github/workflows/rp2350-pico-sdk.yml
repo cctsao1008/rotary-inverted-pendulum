@@ -25,6 +25,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Run native runtime semantic checks
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+            -Ifirmware/targets/rp2350a/include \
+            firmware/targets/rp2350a/src/runtime.cpp \
+            firmware/targets/rp2350a/tests/runtime_core_test.cpp \
+            -o /tmp/rp2350a-runtime-core-test
+          /tmp/rp2350a-runtime-core-test
+
       - name: Install Arm embedded toolchain
         run: |
           sudo apt-get update
@@ -62,10 +71,10 @@ jobs:
           test -f build/rp2350a/rip_rp2350a.bin
           test -f build/rp2350a/rip_rp2350a.uf2
 
-      - name: Upload stage-0 firmware
+      - name: Upload feature-parity firmware
         uses: actions/upload-artifact@v4
         with:
-          name: rp2350a-stage0
+          name: rp2350a-feature-parity
           path: |
             build/rp2350a/rip_rp2350a.elf
             build/rp2350a/rip_rp2350a.bin
