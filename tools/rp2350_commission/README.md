@@ -9,7 +9,7 @@ rp2350_commission.py
         +-- CDC: debug/status console + log capture
 ```
 
-The user-facing entry point is always:
+Run:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
@@ -21,7 +21,7 @@ Install dependencies with:
 python -m pip install -r tools/rp2350_commission/requirements.txt
 ```
 
-## Commands
+Commands:
 
 ```text
 status
@@ -37,14 +37,11 @@ prbs
 all
 ```
 
-`all` runs status, ADC, encoder, motor direction, speed sweep, position step, open-loop step response, chirp, and PRBS in that order. Passive checks run first; one confirmation is required before the active portion unless `--yes` is supplied.
+`all` runs the complete sequence. Passive checks run first; one confirmation is required before the active portion unless `--yes` is supplied.
 
-## Communication split
+## USB split
 
-- **HID** carries 100 Hz machine-readable telemetry and acknowledged test commands.
-- **CDC** carries human-readable `help`, `version`, `status`, debug/event text, and captured logs.
-
-HID commands:
+HID carries machine-readable telemetry and acknowledged test commands:
 
 ```text
 GET_STATUS
@@ -54,13 +51,13 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-Motor test commands are intentionally direct. Firmware only checks the normalized command range and keeps a short timeout so a stopped host does not leave a stale command active. There is no extra arm/maintenance handshake and no firmware-side slew limiter to distort step, chirp, or PRBS tests.
+CDC carries human-readable `help`, `version`, `status`, debug/event text, and captured logs.
 
-Current command range is the full normalized interval `[-1.0, +1.0]`. The tool's default tests remain much smaller unless explicitly changed.
+`SET_MOTOR_COMMAND` is deliberately direct. Firmware checks the normalized range `[-1.0, +1.0]` and applies a short stale-command timeout. There is no separate maintenance/authority handshake and no extra firmware slew limiter. The default tests use much smaller amplitudes unless explicitly changed.
 
 ## Evidence
 
-Every recorded test writes to:
+Each recorded test writes:
 
 ```text
 artifacts/commissioning/<timestamp>-<test>/
@@ -71,9 +68,7 @@ artifacts/commissioning/<timestamp>-<test>/
     result.md
 ```
 
-HID telemetry is the machine-facing measurement record. CDC is captured alongside it as diagnostic/event evidence.
-
-## Current RP2350 signal mapping
+## Signal mapping
 
 ```text
 Motor A
@@ -89,15 +84,4 @@ Pendulum
   ADC   A0 / GPIO26 / ADC0
 ```
 
-Telemetry includes raw Encoder1 A/B states, accumulated encoder count, ADC raw value, estimated state, runtime timing evidence, controller demand, and the command actually applied to the motor backend.
-
-## Test intent
-
-- `adc`: raw range/noise evidence for pendulum calibration.
-- `encoder`: live A/B states, accumulated count and arm state.
-- `motor-direction`: positive/negative command sign versus encoder count direction.
-- `speed-sweep`: normalized command versus steady arm velocity.
-- `position-step`: host-side PD position characterization.
-- `step-response`: open-loop step evidence.
-- `chirp`: swept-sine excitation for frequency-domain/SysID work.
-- `prbs`: deterministic seeded excitation for SysID.
+Telemetry includes raw Encoder1 A/B states, accumulated count, ADC raw value, estimated state, timing evidence, and the command applied to the motor backend.
