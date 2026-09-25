@@ -1,6 +1,6 @@
 # RP2350 Commissioning Tool
 
-This folder owns the host-side test and commissioning interface for the RP2350A target. CDC and HID are managed by one tool and one session:
+This folder owns the host-side test interface for the RP2350A target. CDC and HID are managed by one tool and one session:
 
 ```text
 rp2350_commission.py
@@ -13,12 +13,6 @@ Run:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
-```
-
-Install dependencies with:
-
-```bash
-python -m pip install -r tools/rp2350_commission/requirements.txt
 ```
 
 Commands:
@@ -37,11 +31,7 @@ prbs
 all
 ```
 
-`all` runs the complete sequence. Passive checks run first; one confirmation is required before the active portion unless `--yes` is supplied.
-
-## USB split
-
-HID carries machine-readable telemetry and acknowledged test commands:
+HID commands are deliberately minimal:
 
 ```text
 GET_STATUS
@@ -51,37 +41,18 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
+`SET_MOTOR_COMMAND` directly controls the normalized motor command. Firmware only checks `[-1.0, +1.0]` and uses a short stale-command timeout. There is no extra commissioning authority state, arm handshake, or slew limiter.
+
 CDC carries human-readable `help`, `version`, `status`, debug/event text, and captured logs.
 
-`SET_MOTOR_COMMAND` is deliberately direct. Firmware checks the normalized range `[-1.0, +1.0]` and applies a short stale-command timeout. There is no separate maintenance/authority handshake and no extra firmware slew limiter. The default tests use much smaller amplitudes unless explicitly changed.
+Each recorded test writes under `artifacts/commissioning/<timestamp>-<test>/` with CSV samples, CDC log, metadata, summary, and a short result report.
 
-## Evidence
-
-Each recorded test writes:
+Current signal mapping:
 
 ```text
-artifacts/commissioning/<timestamp>-<test>/
-    metadata.json
-    samples.csv
-    cdc.log
-    summary.json
-    result.md
+Motor A:  D10/GPIO10 PWM, D13/GPIO13 AIN1, D12/GPIO12 AIN2
+Encoder1: D9/GPIO9 A, D2/GPIO2 B
+Pendulum: A0/GPIO26/ADC0
 ```
 
-## Signal mapping
-
-```text
-Motor A
-  PWM   D10 / GPIO10
-  AIN1  D13 / GPIO13
-  AIN2  D12 / GPIO12
-
-Encoder1
-  A     D9 / GPIO9
-  B     D2 / GPIO2
-
-Pendulum
-  ADC   A0 / GPIO26 / ADC0
-```
-
-Telemetry includes raw Encoder1 A/B states, accumulated count, ADC raw value, estimated state, timing evidence, and the command applied to the motor backend.
+Telemetry includes raw Encoder1 A/B states, accumulated count, ADC raw value, estimated state, timing evidence, and the applied motor command.
