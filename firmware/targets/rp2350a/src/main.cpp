@@ -1,15 +1,27 @@
+#include <cmath>
 #include <cstdint>
 
 #include "rip/commissioning.hpp"
 #include "rip/config.hpp"
-#include "rip/maintenance.hpp"
 #include "rip/platform.hpp"
 #include "rip/runtime.hpp"
 #include "rip/usb.hpp"
 
 namespace {
 
-void service_commissioning(rip::ControlRuntime& runtime, rip::MaintenanceAuthority& maintenance) {
+struct CommissioningMotor {
+    bool active{false};
+    float command{0.0f};
+    std::uint64_t deadline_us{0};
+
+    void clear() {
+        active = false;
+        command = 0.0f;
+        deadline_us = 0;
+    }
+};
+
+void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& motor) {
     rip::commissioning::Request request{};
     while (rip::commissioning::take_request(request)) {
         const std::uint64_t now_us = rip::platform::now_us();
@@ -18,9 +30,9 @@ void service_commissioning(rip::ControlRuntime& runtime, rip::MaintenanceAuthori
                 const std::uint32_t detail =
                     static_cast<std::uint32_t>(runtime.runtime_state()) |
                     (static_cast<std::uint32_t>(runtime.authority_mode()) << 8) |
-                    (maintenance.active() ? (1u << 16) : 0u);
+                    (motor.active ? (1u << 16) : 0u);
                 rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, detail,
-                                               maintenance.command().command, 0.0f);
+                                               motor.command, 0.0f);
                 break;
             }
             case rip::commissioning::Command::TelemetryOn:
@@ -31,32 +43,24 @@ void service_commissioning(rip::ControlRuntime& runtime, rip::MaintenanceAuthori
                 rip::usb::set_telemetry_enabled(false);
                 rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
                 break;
-            case rip::commissioning::Command::MaintenanceEnter:
-                if (runtime.runtime_state() == rip::RuntimeState::Ready &&
-                    runtime.authority_mode() == rip::AuthorityMode::Disarmed) {
-                    maintenance.enter(now_us);
-                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
-                } else {
-                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Denied);
-                }
-                break;
-            case rip::commissioning::Command::MaintenanceExit:
-                maintenance.exit();
-                rip::platform::safe_off();
-                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
-                break;
-            case rip::commissioning::Command::SetMotorCommand:
-                if (!maintenance.active()) {
-                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Denied);
-                } else if (!maintenance.set_command(request.value0, now_us, request.duration_ms)) {
+            case rip::commissioning::Command::SetMotorCommand: {
+                std::uint32_t lease_ms = request.duration_ms;
+                if (lease_ms == 0) lease_ms = rip::config::kCommissioningDefaultLeaseMs;
+                if (!std::isfinite(request.value0) ||
+                    std::fabs(request.value0) > rip::config::kCommissioningMaxAbsCommand ||
+                    lease_ms > rip::config::kCommissioningMaxLeaseMs) {
                     rip::commissioning::queue_ack(request, rip::commissioning::Status::Range);
-                } else {
-                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, 0,
-                                                   maintenance.command().command, 0.0f);
+                    break;
                 }
+                motor.active = true;
+                motor.command = request.value0;
+                motor.deadline_us = now_us + static_cast<std::uint64_t>(lease_ms) * 1000u;
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, 0,
+                                               motor.command, 0.0f);
                 break;
+            }
             case rip::commissioning::Command::SafeOff:
-                maintenance.exit();
+                motor.clear();
                 rip::platform::safe_off();
                 rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
                 break;
@@ -66,6 +70,13 @@ void service_commissioning(rip::ControlRuntime& runtime, rip::MaintenanceAuthori
         }
     }
     rip::commissioning::service();
+}
+
+rip::BoundedActuatorCommand direct_commissioning_command(float command) {
+    rip::BoundedActuatorCommand out{};
+    out.command = command;
+    out.predicted_arm_torque_nm = command * rip::config::kActuatorTorquePerEffectiveCommandNm;
+    return out;
 }
 
 }  // namespace
@@ -85,22 +96,22 @@ int main() {
     rip::ControlWatchdog control_watchdog(rip::config::kControlWatchdogTimeoutUs);
     rip::MeasurementAdapter adapter;
     rip::ControlRuntime runtime;
-    rip::MaintenanceAuthority maintenance;
+    CommissioningMotor commissioning_motor;
 
-    // Keep automatic closed-loop authority aligned with main. Maintenance
-    // commissioning is a separate bounded HID-requested mode and is never
-    // entered implicitly at boot.
+    // The production control path remains available, but host commissioning is
+    // intentionally simple: SET_MOTOR_COMMAND is a direct normalized test input
+    // with only a range check and a short timeout.
 
     rip::RuntimeSnapshot snapshot{};
     rip::usb::set_snapshot_source(&snapshot);
-    rip::usb::log("boot,target=rp2350a,board=uno_rp2350,runtime=feature-parity,motor_authority=0\r\n");
+    rip::usb::log("boot,target=rp2350a,board=uno_rp2350,runtime=feature-parity,motor_command=0\r\n");
 
     std::uint32_t sample_index = 0;
     std::uint32_t telemetry_ticks = 0;
 
     while (true) {
         rip::usb::task();
-        service_commissioning(runtime, maintenance);
+        service_commissioning(runtime, commissioning_motor);
 
         const rip::platform::SchedulerEvidence scheduler = rip::platform::wait_next_opportunity();
         const std::uint64_t cycle_started = rip::platform::now_us();
@@ -135,18 +146,16 @@ int main() {
             control_watchdog.kick(captured_at);
         }
 
-        maintenance.tick(captured_at);
-        rip::BoundedActuatorCommand applied_command{};
-        rip::AuthorityMode applied_authority = runtime.authority_mode();
+        if (commissioning_motor.active && captured_at > commissioning_motor.deadline_us) {
+            commissioning_motor.clear();
+        }
 
-        if (cycle.kind == rip::ControlCycle::Kind::Computed && cycle.authorized &&
-            !maintenance.active()) {
-            applied_command = cycle.bounded_command;
+        rip::BoundedActuatorCommand applied_command{};
+        if (commissioning_motor.active) {
+            applied_command = direct_commissioning_command(commissioning_motor.command);
             rip::platform::apply_tb6612(rip::map_tb6612(applied_command));
-        } else if (maintenance.active() && runtime.runtime_state() == rip::RuntimeState::Ready &&
-                   runtime.authority_mode() == rip::AuthorityMode::Disarmed) {
-            applied_command = maintenance.command();
-            applied_authority = rip::AuthorityMode::Maintenance;
+        } else if (cycle.kind == rip::ControlCycle::Kind::Computed && cycle.authorized) {
+            applied_command = cycle.bounded_command;
             rip::platform::apply_tb6612(rip::map_tb6612(applied_command));
         } else {
             rip::platform::safe_off();
@@ -158,7 +167,7 @@ int main() {
         snapshot.arm_encoder_count = raw.arm_encoder.accumulated_count;
         snapshot.regime = runtime.regime();
         snapshot.runtime_state = runtime.runtime_state();
-        snapshot.authority_mode = applied_authority;
+        snapshot.authority_mode = runtime.authority_mode();
         snapshot.missed_opportunities = scheduler.missed_opportunities;
         snapshot.deadline_overruns = scheduler.deadline_overruns;
         if (cycle.kind == rip::ControlCycle::Kind::Computed) {
@@ -178,6 +187,6 @@ int main() {
 
         rip::platform::watchdog_feed();
         rip::usb::task();
-        service_commissioning(runtime, maintenance);
+        service_commissioning(runtime, commissioning_motor);
     }
 }
