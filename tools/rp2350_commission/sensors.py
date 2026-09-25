@@ -135,3 +135,61 @@ def encoder(
         }
         recorder.write_summary(summary)
         return summary
+
+
+def free_swing(device: Rp2350Device, duration_s: float = 10.0) -> dict[str, object]:
+    """Record a passive pendulum swing and estimate its period from raw ADC crossings."""
+    if duration_s <= 0.0:
+        raise ValueError("duration must be > 0")
+
+    device.safe_off()
+    device.start_telemetry()
+    with RunRecorder("free-swing") as recorder:
+        recorder.write_metadata(
+            {
+                **_metadata(device, "free-swing"),
+                "duration_s": duration_s,
+                "motor_command": 0.0,
+            }
+        )
+        samples = []
+        for sample in device.samples(duration_s):
+            samples.append(sample)
+            recorder.append_sample(sample, requested_command=0.0)
+            recorder.append_cdc(device.drain_cdc())
+
+        if len(samples) < 3:
+            raise RuntimeError("insufficient telemetry during free-swing test")
+
+        adc_values = [sample.pendulum_adc_raw for sample in samples]
+        center = statistics.fmean(adc_values)
+        crossings_us: list[int] = []
+        previous = adc_values[0]
+        for sample, value in zip(samples[1:], adc_values[1:]):
+            if previous < center <= value:
+                crossings_us.append(sample.timestamp_us)
+            previous = value
+
+        periods_s = [
+            (later - earlier) * 1.0e-6
+            for earlier, later in zip(crossings_us, crossings_us[1:])
+            if later > earlier
+        ]
+        mean_period_s = statistics.fmean(periods_s) if periods_s else None
+        frequency_hz = 1.0 / mean_period_s if mean_period_s and mean_period_s > 0.0 else None
+
+        summary = {
+            "test": "free-swing",
+            "samples": len(samples),
+            "duration_s": duration_s,
+            "adc_min": min(adc_values),
+            "adc_max": max(adc_values),
+            "adc_peak_to_peak": max(adc_values) - min(adc_values),
+            "adc_center": center,
+            "rising_crossings": len(crossings_us),
+            "estimated_period_s": mean_period_s,
+            "estimated_frequency_hz": frequency_hz,
+            "artifact_dir": str(recorder.directory),
+        }
+        recorder.write_summary(summary)
+        return summary
