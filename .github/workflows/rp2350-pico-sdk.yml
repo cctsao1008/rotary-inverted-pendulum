@@ -27,6 +27,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install commissioning Python dependencies
+        run: python3 -m pip install -r tools/rp2350_commission/requirements.txt
+
       - name: Validate commissioning Python modules
         run: |
           python3 -m compileall -q tools/rp2350_commission
