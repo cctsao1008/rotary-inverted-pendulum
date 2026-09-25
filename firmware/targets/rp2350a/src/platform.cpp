@@ -16,8 +16,8 @@ namespace {
 
 volatile std::int32_t g_encoder_count = 0;
 volatile std::uint8_t g_encoder_state = 0;
-std::uint g_pwm_slice = 0;
-std::uint g_pwm_channel = 0;
+uint g_pwm_slice = 0;
+uint g_pwm_channel = 0;
 std::uint16_t g_pwm_wrap = 0;
 std::uint64_t g_next_opportunity_us = 0;
 SchedulerEvidence g_scheduler_evidence{};
@@ -34,7 +34,7 @@ std::uint8_t read_encoder_state() {
                                      (gpio_get(board::kArmEncoderBGpio) ? 1u : 0u));
 }
 
-void encoder_irq(std::uint gpio, std::uint32_t events) {
+void encoder_irq(uint gpio, std::uint32_t events) {
     (void)gpio;
     (void)events;
     const std::uint8_t next = read_encoder_state();
