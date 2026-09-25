@@ -37,19 +37,20 @@ int main() {
         const rip::platform::SchedulerEvidence scheduler = rip::platform::wait_next_opportunity();
         const std::uint64_t cycle_started = rip::platform::now_us();
 
-        const rip::SensorTimingHealth timing = timing_monitor.on_event(cycle_started);
-        control_watchdog.kick(cycle_started);
-
         rip::RawObservation raw{};
         raw.sample_index = sample_index++;
-        raw.pendulum.captured_at.value = cycle_started;
         raw.pendulum.adc_raw = rip::platform::read_pendulum_adc();
+        raw.arm_encoder.accumulated_count = rip::platform::read_arm_encoder_count();
+        const std::uint64_t captured_at = rip::platform::now_us();
+        raw.pendulum.captured_at.value = captured_at;
+        raw.arm_encoder.captured_at.value = captured_at;
         raw.pendulum.quality = rip::MeasurementAvailable | rip::MeasurementIoOk |
                                rip::MeasurementTimingValid;
-        raw.arm_encoder.captured_at.value = cycle_started;
-        raw.arm_encoder.accumulated_count = rip::platform::read_arm_encoder_count();
         raw.arm_encoder.quality = rip::MeasurementAvailable | rip::MeasurementIoOk |
                                   rip::MeasurementTimingValid;
+
+        const rip::SensorTimingHealth timing = timing_monitor.on_event(captured_at);
+        const rip::WatchdogHealth watchdog_health = control_watchdog.health(captured_at);
 
         rip::EstimatorMeasurement measurement{};
         const bool measurement_ok = adapter.convert(raw, measurement);
@@ -59,9 +60,14 @@ int main() {
         observation.sensor_valid = measurement_ok;
         observation.sample_age_us = 0;
         observation.timing = timing;
-        observation.watchdog = control_watchdog.health(cycle_started);
+        observation.watchdog = watchdog_health;
 
         const rip::ControlCycle cycle = runtime.step(observation);
+        if (cycle.kind != rip::ControlCycle::Kind::Error) {
+            // Match the STM32 target: the software watchdog is kicked only after
+            // one successfully serviced runtime opportunity.
+            control_watchdog.kick(captured_at);
+        }
 
         // Physical output is reachable only through an AuthorizedActuation
         // result. With the main-equivalent boot policy this remains safe-off.
@@ -71,7 +77,7 @@ int main() {
             rip::platform::safe_off();
         }
 
-        snapshot.timestamp_us = cycle_started;
+        snapshot.timestamp_us = captured_at;
         snapshot.sample_index = raw.sample_index;
         snapshot.pendulum_adc_raw = raw.pendulum.adc_raw;
         snapshot.arm_encoder_count = raw.arm_encoder.accumulated_count;
@@ -86,6 +92,7 @@ int main() {
             snapshot.command = cycle.bounded_command;
         }
 
+        // Critical-path accounting ends before USB CDC/HID background service.
         const std::uint64_t cycle_finished = rip::platform::now_us();
         snapshot.execution_time_us = static_cast<std::uint32_t>(cycle_finished - cycle_started);
 
