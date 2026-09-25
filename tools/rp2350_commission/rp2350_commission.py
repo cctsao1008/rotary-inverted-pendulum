@@ -25,9 +25,13 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("monitor")
     p.add_argument("--duration", type=float, default=10.0)
+    p.add_argument("--motor-command", type=float)
 
     p = sub.add_parser("adc")
     p.add_argument("--duration", type=float, default=5.0)
+
+    p = sub.add_parser("free-swing")
+    p.add_argument("--duration", type=float, default=10.0)
 
     p = sub.add_parser("encoder")
     p.add_argument("--duration", type=float, default=5.0)
@@ -45,9 +49,20 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--command", dest="motor_command", type=float, default=0.10)
     p.add_argument("--hold", type=float, default=1.0)
 
+    p = sub.add_parser("breakaway")
+    p.add_argument("--step", type=float, default=0.01)
+    p.add_argument("--max-command", type=float, default=0.30)
+    p.add_argument("--hold", type=float, default=0.50)
+    p.add_argument("--min-counts", type=int, default=4)
+
     p = sub.add_parser("speed-sweep")
     p.add_argument("--hold", type=float, default=1.5)
     p.add_argument("--commands", type=float, nargs="*")
+
+    p = sub.add_parser("coast-down")
+    p.add_argument("--command", type=float, default=0.20)
+    p.add_argument("--runup", type=float, default=2.0)
+    p.add_argument("--coast", type=float, default=5.0)
 
     p = sub.add_parser("position-step")
     p.add_argument("--delta", type=float, default=0.25)
@@ -74,6 +89,7 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("all")
     p.add_argument("--sensor-duration", type=float, default=5.0)
+    p.add_argument("--free-swing-duration", type=float, default=10.0)
     p.add_argument("--encoder-command", type=float, default=0.10)
     p.add_argument("--position-delta", type=float, default=0.25)
     p.add_argument("--chirp-duration", type=float, default=20.0)
@@ -95,9 +111,17 @@ def main(argv: list[str] | None = None) -> int:
             device.safe_off()
             _print({"safe_off": True})
         elif args.action == "monitor":
-            _print(sensors.monitor(device, args.duration))
+            _print(
+                sensors.monitor(
+                    device,
+                    args.duration,
+                    motor_command=args.motor_command,
+                )
+            )
         elif args.action == "adc":
             _print(sensors.adc(device, args.duration))
+        elif args.action == "free-swing":
+            _print(sensors.free_swing(device, args.duration))
         elif args.action == "encoder":
             _print(
                 sensors.encoder(
@@ -122,8 +146,27 @@ def main(argv: list[str] | None = None) -> int:
                     hold_s=args.hold,
                 )
             )
+        elif args.action == "breakaway":
+            _print(
+                motor.breakaway(
+                    device,
+                    step=args.step,
+                    max_command=args.max_command,
+                    hold_s=args.hold,
+                    min_counts=args.min_counts,
+                )
+            )
         elif args.action == "speed-sweep":
             _print(motor.speed_sweep(device, commands=args.commands, hold_s=args.hold))
+        elif args.action == "coast-down":
+            _print(
+                motor.coast_down(
+                    device,
+                    command=args.command,
+                    runup_s=args.runup,
+                    coast_s=args.coast,
+                )
+            )
         elif args.action == "position-step":
             _print(
                 motor.position_step(
@@ -161,14 +204,17 @@ def main(argv: list[str] | None = None) -> int:
             results = {
                 "status": {"version": device.version(), "status": device.status()},
                 "adc": sensors.adc(device, args.sensor_duration),
+                "free_swing": sensors.free_swing(device, args.free_swing_duration),
                 "encoder": sensors.encoder(
                     device,
                     args.sensor_duration,
                     motor_command=args.encoder_command,
                 ),
             }
+            results["breakaway"] = motor.breakaway(device)
             results["motor_direction"] = motor.motor_direction(device)
             results["speed_sweep"] = motor.speed_sweep(device)
+            results["coast_down"] = motor.coast_down(device)
             results["position_step"] = motor.position_step(
                 device,
                 delta_rad=args.position_delta,
