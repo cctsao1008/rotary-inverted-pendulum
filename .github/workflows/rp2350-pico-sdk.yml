@@ -36,6 +36,11 @@ jobs:
           PYTHONPATH=tools/rp2350_commission python3 -c "import protocol; assert protocol.HID_REPORT_SIZE == 64"
           python3 tools/rp2350_commission/rp2350_commission.py --help >/dev/null
 
+      - name: Run commissioning protocol unit tests
+        run: |
+          PYTHONPATH=tools/rp2350_commission \
+            python3 -m unittest discover -s tools/rp2350_commission -p 'test_*.py' -v
+
       - name: Run native runtime semantic checks
         run: |
           g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
