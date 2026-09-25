@@ -10,8 +10,6 @@ enum class Command : std::uint8_t {
     GetStatus = 0x01,
     TelemetryOn = 0x02,
     TelemetryOff = 0x03,
-    MaintenanceEnter = 0x10,
-    MaintenanceExit = 0x11,
     SetMotorCommand = 0x12,
     SafeOff = 0x13,
 };
