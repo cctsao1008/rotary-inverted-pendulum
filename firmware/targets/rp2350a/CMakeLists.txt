@@ -19,6 +19,8 @@ include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 project(rip_rp2350a C CXX ASM)
 pico_sdk_init()
 
+option(RIP_ENABLE_CDC_LOG "Enable unsolicited CDC debug logging" ON)
+
 add_executable(rip_rp2350a
     src/main.cpp
     src/board.cpp
@@ -46,6 +48,12 @@ target_compile_options(rip_rp2350a PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic>
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic;-fno-exceptions;-fno-rtti>
 )
+
+if(RIP_ENABLE_CDC_LOG)
+    target_compile_definitions(rip_rp2350a PRIVATE RIP_ENABLE_CDC_LOG=1)
+else()
+    target_compile_definitions(rip_rp2350a PRIVATE RIP_ENABLE_CDC_LOG=0)
+endif()
 
 # USB is owned directly by TinyUSB so CDC and HID can coexist as one composite
 # device. Do not also instantiate Pico stdio USB.
