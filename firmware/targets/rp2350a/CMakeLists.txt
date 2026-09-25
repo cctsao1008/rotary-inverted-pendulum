@@ -17,14 +17,15 @@ set(PICO_BOARD uno_rp2350 CACHE STRING "Pico SDK board")
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
 project(rip_rp2350a C CXX ASM)
-
 pico_sdk_init()
-
-option(RIP_ENABLE_CDC_LOG "Enable USB CDC commissioning/debug output" ON)
 
 add_executable(rip_rp2350a
     src/main.cpp
     src/board.cpp
+    src/runtime.cpp
+    src/platform.cpp
+    src/usb.cpp
+    src/usb_descriptors.c
 )
 
 target_include_directories(rip_rp2350a PRIVATE
@@ -33,7 +34,12 @@ target_include_directories(rip_rp2350a PRIVATE
 
 target_link_libraries(rip_rp2350a PRIVATE
     pico_stdlib
+    hardware_adc
+    hardware_clocks
     hardware_gpio
+    hardware_pwm
+    hardware_watchdog
+    tinyusb_device
 )
 
 target_compile_options(rip_rp2350a PRIVATE
@@ -41,15 +47,9 @@ target_compile_options(rip_rp2350a PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic;-fno-exceptions;-fno-rtti>
 )
 
-if(RIP_ENABLE_CDC_LOG)
-    target_compile_definitions(rip_rp2350a PRIVATE RIP_ENABLE_CDC_LOG=1)
-else()
-    target_compile_definitions(rip_rp2350a PRIVATE RIP_ENABLE_CDC_LOG=0)
-endif()
-
-# Stage-0 commissioning uses USB CDC only. HID is intentionally deferred until
-# the basic boot/debug path is proven on hardware.
-pico_enable_stdio_usb(rip_rp2350a 1)
+# USB is owned directly by TinyUSB so CDC and HID can coexist as one composite
+# device. Do not also instantiate Pico stdio USB.
+pico_enable_stdio_usb(rip_rp2350a 0)
 pico_enable_stdio_uart(rip_rp2350a 0)
 
 pico_add_extra_outputs(rip_rp2350a)
