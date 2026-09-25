@@ -43,6 +43,8 @@ CDC carries debug/status/log text. HID carries commands and 100 Hz binary teleme
 
 `encoder --motor-command ...` is the direct live encoder check: the tool rotates the arm while recording A/B, count, position, velocity, and applied command. `monitor` prints the same live signals plus execution timing.
 
+`all` uses a small `+0.10` motor command during the encoder capture by default, so Encoder1 is checked while the arm is actually moving. Override it with `all --encoder-command <value>` and adjust the ADC/encoder capture window with `--sensor-duration`.
+
 All test commands run immediately when invoked; there are no interactive confirmation prompts. Active tests call `SAFE_OFF` when they finish, and the firmware timeout stops a stale command if the host disappears.
 
 Recorded tests write under:
