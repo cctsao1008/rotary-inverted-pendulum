@@ -96,7 +96,24 @@ Host entry point:
 python tools/rp2350_commission/rp2350_commission.py <command>
 ```
 
-## Build
+## Build and flash
+
+On Windows, after Pico SDK and the prebuilt picotool package are available under `_deps`, use the thin helper scripts from the repository root:
+
+```powershell
+.\tools\rp2350_build.ps1
+.\tools\rp2350_flash.ps1
+```
+
+`rp2350_build.ps1` automatically uses `_deps/pico-sdk` when `PICO_SDK_PATH` is not already set, locates `picotoolConfig.cmake` under `_deps`, configures the Release Ninja build, builds the target, and verifies the ELF/BIN/UF2 outputs. Use `-Clean` when a fresh CMake configure is needed:
+
+```powershell
+.\tools\rp2350_build.ps1 -Clean
+```
+
+`rp2350_flash.ps1` finds the `RPI-RP2` BOOTSEL drive and copies the generated UF2. Put the board in BOOTSEL mode before running it. A different UF2 may be supplied with `-Uf2 <path>`.
+
+The equivalent manual build is:
 
 ```bash
 export PICO_SDK_PATH=/path/to/pico-sdk
