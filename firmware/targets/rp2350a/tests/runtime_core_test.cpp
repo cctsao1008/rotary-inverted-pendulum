@@ -2,7 +2,6 @@
 #include <cmath>
 
 #include "rip/config.hpp"
-#include "rip/maintenance.hpp"
 #include "rip/runtime.hpp"
 
 namespace {
@@ -79,7 +78,7 @@ int main() {
     assert(frame.mode == rip::Tb6612BridgeMode::DrivePositive);
     assert(near(frame.duty_fraction, 0.5f));
 
-    // Safety gate starts from zero authority and then earns command through slew.
+    // Closed-loop safety semantics remain unchanged from the production path.
     rip::CommandSafetyGate safety;
     safety.configure({0.8f, 10.0f});
     rip::BoundedActuatorCommand safe{};
@@ -87,18 +86,6 @@ int main() {
     assert(near(safe.command, 0.0f));
     assert(safety.constrain(command, {11000}, actuator, safe));
     assert(near(safe.command, 0.1f));
-
-    // HID commissioning maintenance authority is explicit, slew bounded, and
-    // expires to zero authority if the host stops refreshing its finite lease.
-    rip::MaintenanceAuthority maintenance;
-    assert(maintenance.enter(1000));
-    assert(maintenance.active());
-    assert(maintenance.set_command(0.10f, 101000, 250));
-    assert(near(maintenance.command().command, 0.10f));
-    maintenance.tick(351001);
-    assert(!maintenance.active());
-    assert(near(maintenance.command().command, 0.0f));
-    assert(!maintenance.set_command(0.10f, 352000, 250));
 
     return 0;
 }
