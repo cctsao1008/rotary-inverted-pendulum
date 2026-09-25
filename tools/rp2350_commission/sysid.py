@@ -52,9 +52,7 @@ def step_response(
     confirm_active_test("step-response", abs(amplitude), assume_yes)
     device.start_telemetry()
     with RunRecorder("step-response") as recorder:
-        recorder.write_metadata(
-            {"test": "step-response", "amplitude": amplitude, "hold_s": hold_s}
-        )
+        recorder.write_metadata({"test": "step-response", "amplitude": amplitude, "hold_s": hold_s})
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, lambda _: amplitude, hold_s, tag="positive-step")
@@ -63,11 +61,7 @@ def step_response(
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
             device.safe_off()
-        summary = {
-            "test": "step-response",
-            "amplitude": amplitude,
-            "artifact_dir": str(recorder.directory),
-        }
+        summary = {"test": "step-response", "amplitude": amplitude, "artifact_dir": str(recorder.directory)}
         recorder.write_summary(summary)
         return summary
 
@@ -94,25 +88,14 @@ def chirp(
         return amplitude * math.sin(phase)
 
     with RunRecorder("chirp") as recorder:
-        recorder.write_metadata(
-            {
-                "test": "chirp",
-                "amplitude": amplitude,
-                "f0_hz": f0_hz,
-                "f1_hz": f1_hz,
-                "duration_s": duration_s,
-            }
-        )
+        recorder.write_metadata({"test": "chirp", "amplitude": amplitude, "f0_hz": f0_hz, "f1_hz": f1_hz, "duration_s": duration_s})
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, command_at, duration_s, tag="chirp")
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
             device.safe_off()
-        summary = {
-            "test": "chirp",
-            "artifact_dir": str(recorder.directory),
-        }
+        summary = {"test": "chirp", "artifact_dir": str(recorder.directory)}
         recorder.write_summary(summary)
         return summary
 
@@ -138,24 +121,13 @@ def prbs(
         return values[index]
 
     with RunRecorder("prbs") as recorder:
-        recorder.write_metadata(
-            {
-                "test": "prbs",
-                "amplitude": amplitude,
-                "interval_s": interval_s,
-                "duration_s": duration_s,
-                "seed": seed,
-            }
-        )
+        recorder.write_metadata({"test": "prbs", "amplitude": amplitude, "interval_s": interval_s, "duration_s": duration_s, "seed": seed})
         try:
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-pre")
             _stream_command(device, recorder, command_at, duration_s, tag="prbs")
             _stream_command(device, recorder, lambda _: 0.0, 0.5, tag="zero-post")
         finally:
             device.safe_off()
-        summary = {
-            "test": "prbs",
-            "artifact_dir": str(recorder.directory),
-        }
+        summary = {"test": "prbs", "artifact_dir": str(recorder.directory)}
         recorder.write_summary(summary)
         return summary
