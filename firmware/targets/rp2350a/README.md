@@ -26,14 +26,12 @@ ArmActuatorModel
         ↓
 BoundedActuatorCommand
         ↓
-production control qualification
-        ↓
 TB6612 electrical mapping
         ↓
 RP2350 PWM + direction backend
 ```
 
-The complete production-style control path remains available for parity with `main`. Physical commissioning is deliberately simpler: the host can send a direct normalized motor test command over HID, without a separate maintenance/authority handshake. Firmware only checks the normalized range and expires stale host commands after a short timeout.
+The production control path remains available for parity with `main`. Physical commissioning is deliberately simpler: the host can send a direct normalized motor test command over HID. Firmware only checks the normalized range and expires stale host commands after a short timeout.
 
 ## Canonical mapping
 
@@ -48,32 +46,19 @@ The complete production-style control path remains available for parity with `ma
 
 Motor channel A is used (`MA+`, `MA-`, `ENCODER1_A`, `ENCODER1_B`).
 
-The encoder pins are non-consecutive. The stock Pico SDK PIO quadrature example requires two consecutive sampled pins, so this target uses both-edge GPIO IRQ quadrature decoding.
+The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ quadrature decoding.
 
 ## Runtime and timing
 
 - deterministic 1 kHz acquisition/control opportunity;
 - monotonic microsecond timestamps from the RP2350 timer;
 - missed opportunities coalesce instead of replaying as backlog;
-- software sensor-timing and control-watchdog semantics are retained;
 - RP2350 hardware watchdog timeout is 100 ms;
-- execution time, missed opportunities and deadline overrun evidence are exposed to telemetry.
+- timing evidence is exposed to telemetry.
 
-Current calibration/controller constants intentionally preserve the STM32 live-shadow baseline until specimen commissioning:
-
-- pendulum upright ADC: `2928`;
-- pendulum scale: `2π / 4096` rad/count;
-- arm encoder scale: `1040` counts/output revolution;
-- estimator maximum gap: `20 ms`;
-- 1 kHz nominal sampling;
-- QNET-reference LQR gains: `[-0.18355, -0.01585, -0.01120, -0.00745]`;
-- existing energy-swing-up and capture/balance thresholds from `main`.
-
-These are software parity values, not claims that the RP2350 physical specimen is already calibrated.
+Current calibration/controller constants intentionally preserve the STM32 live-shadow baseline until specimen commissioning, including the 1040 count/rev encoder scale and existing swing-up/capture/balance constants.
 
 ## USB and commissioning
-
-USB is a TinyUSB composite device:
 
 ```text
 USB
@@ -103,32 +88,17 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-HID telemetry is 100 Hz while the runtime remains 1 kHz. The report includes raw ADC, Encoder1 A/B logic states, accumulated encoder count, estimated state, regime, torque demand, applied command and timing evidence.
+HID telemetry is 100 Hz while the runtime remains 1 kHz. The report includes raw ADC, Encoder1 A/B logic states, accumulated encoder count, estimated state, applied motor command, and timing evidence.
 
-`SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. The tool's default tests use substantially smaller commands. A short command timeout remains so a stopped host does not leave an old command applied; there is intentionally no additional firmware-side slew limiter because it would distort step/chirp/PRBS inputs.
+`SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. The default test amplitudes are much smaller. A short timeout remains so a stopped host does not leave an old command applied; there is no extra commissioning state machine or firmware slew limiter.
 
-The corresponding host-side entry point is:
+The host-side entry point is:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
 ```
 
-`tools/rp2350_commission/` keeps CDC/HID transport, protocol handling, passive sensor checks, motor characterization, position tests, SysID excitation and evidence recording in one folder while exposing one CLI.
-
-Unsolicited CDC debug output can be disabled without removing the CDC console:
-
-```bash
-cmake -S firmware/targets/rp2350a -B build/rp2350a \
-  -DRIP_ENABLE_CDC_LOG=OFF
-```
-
-## Board definition
-
-`boards/uno_rp2350.h` records the RP2350A package, external Winbond W25Q128JVSIQ QSPI flash, and 16 MiB flash geometry.
-
 ## Build
-
-Use Raspberry Pi Pico SDK 2.3.1 or a compatible newer release and an Arm embedded GCC toolchain.
 
 ```bash
 export PICO_SDK_PATH=/path/to/pico-sdk
@@ -144,14 +114,12 @@ build/rp2350a/rip_rp2350a.bin
 build/rp2350a/rip_rp2350a.uf2
 ```
 
-CI compiles the host commissioning Python modules, executes native C++ semantic checks, and builds the RP2350 image.
-
 ## Physical commissioning
 
-The finished image and unified tool are used to determine specimen-specific facts:
+The finished image and unified tool are used to:
 
-1. observe pendulum ADC raw range and establish specimen calibration;
-2. rotate the arm while reading Encoder1 A/B, accumulated count, arm position and velocity;
+1. observe pendulum ADC raw range and calibration;
+2. read Encoder1 A/B, count, arm position and velocity while the motor turns;
 3. establish motor/encoder sign conventions;
-4. characterize motor dead zone, command-to-speed response and position response;
-5. record step/chirp/PRBS evidence for SysID and later controller tuning.
+4. characterize dead zone, speed and position response;
+5. record step/chirp/PRBS data for SysID and later controller tuning.
