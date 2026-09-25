@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections import deque
 from contextlib import suppress
 from dataclasses import asdict
 import time
 
 from cdc_transport import CdcTransport
 from hid_transport import HidTransport
-from protocol import TelemetrySample
+from protocol import CommandAck, HidCommand, HidStatus, TelemetrySample, encode_command
 
 
 class Rp2350Device:
@@ -23,6 +24,8 @@ class Rp2350Device:
         self.cdc = CdcTransport(port=cdc_port)
         self.require_cdc = require_cdc
         self.cdc_available = False
+        self._sequence = 1
+        self._telemetry_queue: deque[TelemetrySample] = deque()
 
     def open(self) -> None:
         self.hid.open()
@@ -37,8 +40,11 @@ class Rp2350Device:
 
     def close(self) -> None:
         with suppress(Exception):
-            if self.cdc_available:
-                self.cdc.command("telemetry off", wait_s=0.05)
+            self.safe_off()
+        with suppress(Exception):
+            self.maintenance_exit()
+        with suppress(Exception):
+            self.stop_telemetry()
         self.cdc.close()
         self.hid.close()
         self.cdc_available = False
@@ -50,30 +56,79 @@ class Rp2350Device:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
-    def version(self) -> list[str]:
-        if not self.cdc_available:
-            return []
-        return self.cdc.command("version")
+    def _next_sequence(self) -> int:
+        sequence = self._sequence
+        self._sequence = (self._sequence + 1) & 0xFFFFFFFF
+        if self._sequence == 0:
+            self._sequence = 1
+        return sequence
 
-    def status(self) -> list[str]:
-        if not self.cdc_available:
-            return []
-        return self.cdc.command("status")
+    def command(
+        self,
+        command: HidCommand,
+        *,
+        value0: float = 0.0,
+        value1: float = 0.0,
+        duration_ms: int = 0,
+        timeout_s: float = 1.0,
+    ) -> CommandAck:
+        sequence = self._next_sequence()
+        self.hid.write_report(
+            encode_command(
+                command,
+                sequence,
+                value0=value0,
+                value1=value1,
+                duration_ms=duration_ms,
+            )
+        )
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            report = self.hid.read_report(100)
+            if report is None:
+                continue
+            if isinstance(report, TelemetrySample):
+                self._telemetry_queue.append(report)
+                continue
+            if isinstance(report, CommandAck) and report.sequence == sequence:
+                if report.command != int(command):
+                    raise RuntimeError(
+                        f"HID ack command mismatch: expected {int(command):#x}, got {report.command:#x}"
+                    )
+                if not report.ok:
+                    try:
+                        status = HidStatus(report.status).name
+                    except ValueError:
+                        status = str(report.status)
+                    raise RuntimeError(f"HID command {command.name} rejected: {status}")
+                return report
+        raise TimeoutError(f"no HID acknowledgement for {command.name}")
+
+    def version(self) -> list[str]:
+        return self.cdc.command("version") if self.cdc_available else []
+
+    def status(self) -> dict[str, object]:
+        ack = self.command(HidCommand.GET_STATUS)
+        return {
+            "hid": asdict(ack),
+            "cdc": self.cdc.command("status") if self.cdc_available else [],
+        }
 
     def start_telemetry(self) -> None:
-        if self.cdc_available:
-            self.cdc.command("telemetry on", wait_s=0.05)
-            return
-        raise RuntimeError(
-            "HID telemetry is disabled at boot in this firmware; CDC is required to enable it"
-        )
+        self.command(HidCommand.TELEMETRY_ON)
 
     def stop_telemetry(self) -> None:
-        if self.cdc_available:
-            self.cdc.command("telemetry off", wait_s=0.05)
+        self.command(HidCommand.TELEMETRY_OFF)
 
     def read_sample(self, timeout_ms: int = 250) -> TelemetrySample | None:
-        return self.hid.read_telemetry(timeout_ms)
+        if self._telemetry_queue:
+            return self._telemetry_queue.popleft()
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while time.monotonic() < deadline:
+            report = self.hid.read_report(min(100, timeout_ms))
+            if isinstance(report, TelemetrySample):
+                return report
+        return None
 
     def samples(self, duration_s: float):
         deadline = time.monotonic() + duration_s
@@ -89,23 +144,19 @@ class Rp2350Device:
     def sample_dict(sample: TelemetrySample) -> dict[str, object]:
         return asdict(sample)
 
-    # The unified host API already reserves the active commissioning calls.
-    # Firmware must acknowledge HID OUT commands before these are enabled; this
-    # avoids pretending that an ignored USB output report changed hardware state.
-    def require_active_commissioning(self) -> None:
-        raise RuntimeError(
-            "active HID commissioning commands are not acknowledged by the current firmware image"
-        )
-
     def safe_off(self) -> None:
-        self.require_active_commissioning()
+        self.command(HidCommand.SAFE_OFF)
 
     def maintenance_enter(self) -> None:
-        self.require_active_commissioning()
+        self.command(HidCommand.MAINTENANCE_ENTER)
 
     def maintenance_exit(self) -> None:
-        self.require_active_commissioning()
+        self.command(HidCommand.MAINTENANCE_EXIT)
 
-    def set_motor_command(self, value: float, *, lease_ms: int = 250) -> None:
-        _ = value, lease_ms
-        self.require_active_commissioning()
+    def set_motor_command(self, value: float, *, lease_ms: int = 250) -> float:
+        ack = self.command(
+            HidCommand.SET_MOTOR_COMMAND,
+            value0=value,
+            duration_ms=lease_ms,
+        )
+        return ack.value0
