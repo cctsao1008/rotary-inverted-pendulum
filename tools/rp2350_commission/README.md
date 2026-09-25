@@ -1,15 +1,6 @@
 # RP2350 Commissioning Tool
 
-One host-side tool owns RP2350A testing over both USB interfaces:
-
-```text
-rp2350_commission.py
-        |
-        +-- HID: binary telemetry + test commands
-        +-- CDC: debug/status console + log capture
-```
-
-Run:
+One host-side tool owns RP2350A testing over HID + CDC.
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
@@ -22,7 +13,7 @@ status  monitor  adc  encoder  motor-direction  speed-sweep
 position-step  step-response  chirp  prbs  all
 ```
 
-HID commands:
+HID is the machine-facing path:
 
 ```text
 GET_STATUS
@@ -32,11 +23,9 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware checks `[-1.0, +1.0]` and expires stale commands after a short timeout. No extra commissioning state, mode handshake, or slew limiter is involved.
+`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware checks `[-1.0, +1.0]` and expires stale commands after a short timeout. There is no extra test mode handshake or slew limiter.
 
-CDC carries `help`, `version`, `status`, debug/event text, and captured logs.
-
-Current signal mapping:
+CDC remains the human-readable debug/status/log path.
 
 ```text
 Motor A:  D10/GPIO10 PWM, D13/GPIO13 AIN1, D12/GPIO12 AIN2
@@ -44,4 +33,4 @@ Encoder1: D9/GPIO9 A, D2/GPIO2 B
 Pendulum: A0/GPIO26/ADC0
 ```
 
-Telemetry includes raw Encoder1 A/B, accumulated count, ADC raw value, estimated state, timing evidence, and applied motor command. Test evidence is written under `artifacts/commissioning/<timestamp>-<test>/`.
+Telemetry includes Encoder1 A/B, accumulated count, ADC raw value, estimated state, timing evidence, and applied motor command. Test evidence is written under `artifacts/commissioning/<timestamp>-<test>/`.
