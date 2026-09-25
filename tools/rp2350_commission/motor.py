@@ -43,13 +43,8 @@ def _run_command_segment(
     return samples
 
 
-def motor_direction(
-    device: Rp2350Device,
-    *,
-    command: float = 0.10,
-    hold_s: float = 1.0,
-    assume_yes: bool = False,
-) -> dict[str, object]:
+def motor_direction(device: Rp2350Device, *, command: float = 0.10, hold_s: float = 1.0,
+                    assume_yes: bool = False) -> dict[str, object]:
     confirm_active_test("motor-direction", abs(command), assume_yes)
     device.start_telemetry()
     with RunRecorder("motor-direction") as recorder:
@@ -79,13 +74,8 @@ def motor_direction(
         return summary
 
 
-def speed_sweep(
-    device: Rp2350Device,
-    *,
-    commands: list[float] | None = None,
-    hold_s: float = 1.5,
-    assume_yes: bool = False,
-) -> dict[str, object]:
+def speed_sweep(device: Rp2350Device, *, commands: list[float] | None = None,
+                hold_s: float = 1.5, assume_yes: bool = False) -> dict[str, object]:
     commands = commands or [0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50,
                             -0.05, -0.10, -0.15, -0.20, -0.30, -0.40, -0.50]
     max_command = max(abs(x) for x in commands)
@@ -97,41 +87,28 @@ def speed_sweep(
         try:
             _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-pre")
             for command in commands:
-                samples = _run_command_segment(
-                    device, recorder, command, hold_s, tag=f"command-{command:+.3f}"
-                )
+                samples = _run_command_segment(device, recorder, command, hold_s,
+                                               tag=f"command-{command:+.3f}")
                 steady = samples[len(samples) // 2 :] if samples else []
                 if steady:
-                    results.append(
-                        {
-                            "command": command,
-                            "mean_phi_dot_rad_s": statistics.fmean(s.phi_dot for s in steady),
-                            "stdev_phi_dot_rad_s": statistics.pstdev(s.phi_dot for s in steady),
-                        }
-                    )
+                    results.append({
+                        "command": command,
+                        "mean_phi_dot_rad_s": statistics.fmean(s.phi_dot for s in steady),
+                        "stdev_phi_dot_rad_s": statistics.pstdev(s.phi_dot for s in steady),
+                    })
                 _run_command_segment(device, recorder, 0.0, 0.25, tag="zero-between")
         finally:
             device.safe_off()
 
-        summary = {
-            "test": "speed-sweep",
-            "points": results,
-            "artifact_dir": str(recorder.directory),
-        }
+        summary = {"test": "speed-sweep", "points": results,
+                   "artifact_dir": str(recorder.directory)}
         recorder.write_summary(summary)
         return summary
 
 
-def position_step(
-    device: Rp2350Device,
-    *,
-    delta_rad: float = 0.25,
-    kp: float = 0.8,
-    kd: float = 0.08,
-    max_command: float = 0.25,
-    settle_s: float = 2.0,
-    assume_yes: bool = False,
-) -> dict[str, object]:
+def position_step(device: Rp2350Device, *, delta_rad: float = 0.25, kp: float = 0.8,
+                  kd: float = 0.08, max_command: float = 0.25, settle_s: float = 2.0,
+                  assume_yes: bool = False) -> dict[str, object]:
     confirm_active_test("position-step", max_command, assume_yes)
     device.start_telemetry()
     first = device.read_sample(500)
@@ -141,10 +118,8 @@ def position_step(
     targets = [origin + delta_rad, origin, origin - delta_rad, origin]
 
     with RunRecorder("position-step") as recorder:
-        recorder.write_metadata(
-            {"test": "position-step", "delta_rad": delta_rad, "kp": kp, "kd": kd,
-             "max_command": max_command, "origin_rad": origin}
-        )
+        recorder.write_metadata({"test": "position-step", "delta_rad": delta_rad, "kp": kp,
+                                 "kd": kd, "max_command": max_command, "origin_rad": origin})
         target_results = []
         try:
             for index, target in enumerate(targets):
@@ -157,27 +132,19 @@ def position_step(
                     error = target - sample.phi
                     command = max(-max_command, min(max_command, kp * error - kd * sample.phi_dot))
                     device.set_motor_command(command, lease_ms=250)
-                    recorder.append_sample(
-                        sample,
-                        test_phase=f"target-{index}",
-                        position_target_rad=target,
-                        requested_command=command,
-                    )
+                    recorder.append_sample(sample, test_phase=f"target-{index}",
+                                           position_target_rad=target,
+                                           requested_command=command)
                     last = sample
-                target_results.append(
-                    {
-                        "target_rad": target,
-                        "final_phi_rad": last.phi if last else None,
-                        "final_error_rad": target - last.phi if last else None,
-                    }
-                )
+                target_results.append({
+                    "target_rad": target,
+                    "final_phi_rad": last.phi if last else None,
+                    "final_error_rad": target - last.phi if last else None,
+                })
         finally:
             device.safe_off()
 
-        summary = {
-            "test": "position-step",
-            "targets": target_results,
-            "artifact_dir": str(recorder.directory),
-        }
+        summary = {"test": "position-step", "targets": target_results,
+                   "artifact_dir": str(recorder.directory)}
         recorder.write_summary(summary)
         return summary
