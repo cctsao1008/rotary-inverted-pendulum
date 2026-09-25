@@ -23,7 +23,7 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware checks `[-1.0, +1.0]` and expires stale commands after a short timeout. There is no extra test mode handshake or slew limiter.
+`SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware checks `[-1.0, +1.0]` and expires stale commands after a short timeout. No extra test-mode handshake or slew limiter is involved.
 
 CDC remains the human-readable debug/status/log path.
 
