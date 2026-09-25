@@ -5,6 +5,10 @@
 
 #include "tusb.h"
 
+#ifndef RIP_ENABLE_CDC_LOG
+#define RIP_ENABLE_CDC_LOG 1
+#endif
+
 namespace rip::usb {
 namespace {
 
@@ -12,6 +16,8 @@ const RuntimeSnapshot* g_snapshot = nullptr;
 char g_line[96]{};
 std::size_t g_line_len = 0;
 std::uint16_t g_hid_sequence = 0;
+bool g_telemetry_enabled = false;
+bool g_cdc_announced = false;
 
 #pragma pack(push, 1)
 struct HidRuntimeReport {
@@ -48,12 +54,18 @@ void cdc_write(const char* text) {
 void handle_line() {
     g_line[g_line_len] = '\0';
     if (std::strcmp(g_line, "help") == 0) {
-        cdc_write("commands: help version status\r\n");
+        cdc_write("commands: help version status telemetry on telemetry off\r\n");
     } else if (std::strcmp(g_line, "version") == 0) {
         cdc_write("rotary-rp2350a,pico-sdk,cxx17,feature-parity-port\r\n");
     } else if (std::strcmp(g_line, "status") == 0) {
         if (g_snapshot) log_status(*g_snapshot);
         else cdc_write("status,unavailable=1\r\n");
+    } else if (std::strcmp(g_line, "telemetry on") == 0) {
+        g_telemetry_enabled = true;
+        cdc_write("telemetry,enabled=1\r\n");
+    } else if (std::strcmp(g_line, "telemetry off") == 0) {
+        g_telemetry_enabled = false;
+        cdc_write("telemetry,enabled=0\r\n");
     } else if (g_line_len != 0) {
         cdc_write("error,unknown-command\r\n");
     }
@@ -71,8 +83,20 @@ void init() {
 
 void set_snapshot_source(const RuntimeSnapshot* snapshot) { g_snapshot = snapshot; }
 
+bool telemetry_enabled() { return g_telemetry_enabled; }
+void set_telemetry_enabled(bool enabled) { g_telemetry_enabled = enabled; }
+
 void task() {
     tud_task();
+    if (tud_cdc_connected() && !g_cdc_announced) {
+        g_cdc_announced = true;
+#if RIP_ENABLE_CDC_LOG
+        cdc_write("boot,target=rp2350a,board=uno_rp2350,runtime=feature-parity,motor_authority=0\r\n");
+#endif
+    } else if (!tud_cdc_connected()) {
+        g_cdc_announced = false;
+    }
+
     while (tud_cdc_available()) {
         const int ch = tud_cdc_read_char();
         if (ch < 0) break;
@@ -86,14 +110,20 @@ void task() {
     }
 }
 
-void log(const char* text) { cdc_write(text); }
+void log(const char* text) {
+#if RIP_ENABLE_CDC_LOG
+    cdc_write(text);
+#else
+    (void)text;
+#endif
+}
 
 void log_status(const RuntimeSnapshot& snapshot) {
     char buffer[320];
     std::snprintf(buffer, sizeof(buffer),
                   "status,t_us=%llu,sample=%lu,adc=%u,enc=%ld,theta=%.6f,theta_dot=%.6f,"
                   "phi=%.6f,phi_dot=%.6f,regime=%s,runtime=%s,torque_nm=%.6f,cmd=%.6f,"
-                  "missed=%lu,overrun=%lu,exec_us=%lu,motor_authority=%u\r\n",
+                  "missed=%lu,overrun=%lu,exec_us=%lu,telemetry=%u,motor_authority=%u\r\n",
                   static_cast<unsigned long long>(snapshot.timestamp_us),
                   static_cast<unsigned long>(snapshot.sample_index),
                   static_cast<unsigned>(snapshot.pendulum_adc_raw),
@@ -108,12 +138,13 @@ void log_status(const RuntimeSnapshot& snapshot) {
                   static_cast<unsigned long>(snapshot.missed_opportunities),
                   static_cast<unsigned long>(snapshot.deadline_overruns),
                   static_cast<unsigned long>(snapshot.execution_time_us),
+                  g_telemetry_enabled ? 1u : 0u,
                   snapshot.authority_mode == AuthorityMode::ClosedLoop ? 1u : 0u);
     cdc_write(buffer);
 }
 
 bool send_hid_snapshot(const RuntimeSnapshot& snapshot) {
-    if (!tud_hid_ready()) return false;
+    if (!g_telemetry_enabled || !tud_hid_ready()) return false;
     HidRuntimeReport report{};
     report.schema = 1;
     report.flags = snapshot.state.validity == StateValidity::Valid ? 1u : 0u;
