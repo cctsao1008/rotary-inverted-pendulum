@@ -17,11 +17,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--cdc-port", help="override auto-detected CDC COM/tty port")
     parser.add_argument("--hid-path", help="override auto-detected hidapi path")
-    parser.add_argument("--yes", action="store_true", help="confirm bounded active tests non-interactively")
 
     sub = parser.add_subparsers(dest="action", required=True)
 
     sub.add_parser("status")
+    sub.add_parser("safe-off")
 
     p = sub.add_parser("monitor")
     p.add_argument("--duration", type=float, default=10.0)
@@ -31,6 +31,10 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("encoder")
     p.add_argument("--duration", type=float, default=5.0)
+
+    p = sub.add_parser("motor")
+    p.add_argument("--command", type=float, required=True)
+    p.add_argument("--duration", type=float, default=1.0)
 
     p = sub.add_parser("motor-direction")
     p.add_argument("--command", dest="motor_command", type=float, default=0.10)
@@ -81,23 +85,33 @@ def main(argv: list[str] | None = None) -> int:
     with Rp2350Device(hid_path=args.hid_path, cdc_port=args.cdc_port) as device:
         if args.action == "status":
             _print({"version": device.version(), "status": device.status()})
+        elif args.action == "safe-off":
+            device.safe_off()
+            _print({"safe_off": True})
         elif args.action == "monitor":
             _print(sensors.monitor(device, args.duration))
         elif args.action == "adc":
             _print(sensors.adc(device, args.duration))
         elif args.action == "encoder":
             _print(sensors.encoder(device, args.duration))
+        elif args.action == "motor":
+            _print(
+                motor.motor_command(
+                    device,
+                    command=args.command,
+                    duration_s=args.duration,
+                )
+            )
         elif args.action == "motor-direction":
             _print(
                 motor.motor_direction(
                     device,
                     command=args.motor_command,
                     hold_s=args.hold,
-                    assume_yes=args.yes,
                 )
             )
         elif args.action == "speed-sweep":
-            _print(motor.speed_sweep(device, commands=args.commands, hold_s=args.hold, assume_yes=args.yes))
+            _print(motor.speed_sweep(device, commands=args.commands, hold_s=args.hold))
         elif args.action == "position-step":
             _print(
                 motor.position_step(
@@ -107,11 +121,10 @@ def main(argv: list[str] | None = None) -> int:
                     kd=args.kd,
                     max_command=args.max_command,
                     settle_s=args.settle,
-                    assume_yes=args.yes,
                 )
             )
         elif args.action == "step-response":
-            _print(sysid.step_response(device, amplitude=args.amplitude, hold_s=args.hold, assume_yes=args.yes))
+            _print(sysid.step_response(device, amplitude=args.amplitude, hold_s=args.hold))
         elif args.action == "chirp":
             _print(
                 sysid.chirp(
@@ -120,7 +133,6 @@ def main(argv: list[str] | None = None) -> int:
                     f0_hz=args.f0,
                     f1_hz=args.f1,
                     duration_s=args.duration,
-                    assume_yes=args.yes,
                 )
             )
         elif args.action == "prbs":
@@ -131,7 +143,6 @@ def main(argv: list[str] | None = None) -> int:
                     interval_s=args.interval,
                     duration_s=args.duration,
                     seed=args.seed,
-                    assume_yes=args.yes,
                 )
             )
         elif args.action == "all":
@@ -140,19 +151,15 @@ def main(argv: list[str] | None = None) -> int:
                 "adc": sensors.adc(device, args.passive_duration),
                 "encoder": sensors.encoder(device, args.passive_duration),
             }
-            motor.confirm_active_test("all active commissioning tests", 0.50, args.yes)
-            results["motor_direction"] = motor.motor_direction(device, assume_yes=True)
-            results["speed_sweep"] = motor.speed_sweep(device, assume_yes=True)
+            results["motor_direction"] = motor.motor_direction(device)
+            results["speed_sweep"] = motor.speed_sweep(device)
             results["position_step"] = motor.position_step(
-                device, delta_rad=args.position_delta, assume_yes=True
+                device,
+                delta_rad=args.position_delta,
             )
-            results["step_response"] = sysid.step_response(device, assume_yes=True)
-            results["chirp"] = sysid.chirp(
-                device, duration_s=args.chirp_duration, assume_yes=True
-            )
-            results["prbs"] = sysid.prbs(
-                device, duration_s=args.prbs_duration, assume_yes=True
-            )
+            results["step_response"] = sysid.step_response(device)
+            results["chirp"] = sysid.chirp(device, duration_s=args.chirp_duration)
+            results["prbs"] = sysid.prbs(device, duration_s=args.prbs_duration)
             _print(results)
     return 0
 
