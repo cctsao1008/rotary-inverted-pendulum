@@ -116,4 +116,4 @@ The telemetry report includes raw Encoder1 A/B states, accumulated encoder count
 
 ## Safety boundary
 
-Active tests are commissioning operations, not automatic closed-loop admission. The CLI asks for explicit confirmation unless `--yes` is supplied. Firmware maintenance authority is distinct from closed-loop authority, and `SAFE_OFF` / lease expiry do not depend on the host continuing to run.
+Active tests are commissioning operations, not automatic closed-loop admission. The CLI asks for explicit confirmation unless `--yes` is supplied. Firmware maintenance authority is distinct from closed-loop authority, and `SAFE_OFF` / lease expiry do not depend on the host continuing to run. The active path is therefore intentionally firmware-acknowledged rather than a host-only convention.
