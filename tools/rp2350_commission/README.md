@@ -5,8 +5,8 @@ This folder owns the host-side commissioning interface for the RP2350A target. C
 ```text
 rp2350_commission.py
         |
-        +-- HID: machine-readable runtime telemetry and versioned commissioning protocol
-        +-- CDC: human-readable debug/status console and log capture
+        +-- HID: machine-readable runtime telemetry + acknowledged commissioning commands
+        +-- CDC: human-readable debug/status console + log capture
 ```
 
 The user-facing entry point is always:
@@ -37,7 +37,36 @@ prbs
 all
 ```
 
-Passive commands (`status`, `monitor`, `adc`, `encoder`) use the current CDC + HID firmware path directly. Active commands share the same CLI and evidence format, but they only run when firmware acknowledges the versioned HID commissioning command path. The tool fails closed rather than assuming that an ignored HID OUT report changed hardware state.
+Passive and active tests use the same session and evidence format. HID OUT commands are sequence-numbered and require a firmware acknowledgement; the host fails closed on timeout or rejection rather than assuming that an output report changed hardware state.
+
+## Transport ownership
+
+- **HID** owns machine-facing commissioning control and 100 Hz binary runtime telemetry.
+- **CDC** owns human-facing `help`, `version`, `status`, debug/event text, and captured logs.
+- CDC does not grant motor authority.
+
+The commissioning HID commands are:
+
+```text
+GET_STATUS
+TELEMETRY_ON
+TELEMETRY_OFF
+MAINTENANCE_ENTER
+MAINTENANCE_EXIT
+SET_MOTOR_COMMAND
+SAFE_OFF
+```
+
+`SET_MOTOR_COMMAND` is only accepted while firmware is in explicit maintenance authority. The firmware independently bounds the normalized command, slew rate and finite command lease. If the lease is not refreshed, output returns to safe-off.
+
+Current firmware commissioning limits:
+
+```text
+maximum |command|    0.50
+maximum slew         2.0 command/s
+default lease        250 ms
+maximum lease        500 ms
+```
 
 ## Evidence
 
@@ -70,8 +99,19 @@ Pendulum
   ADC   A0 / GPIO26 / ADC0
 ```
 
-The telemetry report includes raw Encoder1 A/B states, accumulated encoder count, ADC raw value, estimated state, runtime timing evidence, controller demand, and command evidence.
+The telemetry report includes raw Encoder1 A/B states, accumulated encoder count, ADC raw value, estimated state, runtime timing evidence, controller demand, applied command and authority state.
+
+## Test intent
+
+- `adc`: raw range/noise evidence for pendulum calibration.
+- `encoder`: live A/B states, accumulated count and arm state.
+- `motor-direction`: positive/negative command sign versus encoder count direction.
+- `speed-sweep`: normalized command versus steady arm velocity.
+- `position-step`: host-side bounded PD position characterization.
+- `step-response`: bounded open-loop step evidence.
+- `chirp`: bounded swept-sine excitation for frequency-domain/SysID work.
+- `prbs`: deterministic seeded bounded excitation for SysID.
 
 ## Safety boundary
 
-Active tests are bounded commissioning operations, not automatic closed-loop admission. The CLI asks for explicit confirmation unless `--yes` is supplied. Firmware-side maintenance authority must independently enforce command magnitude, slew, safe-off, and a finite command lease. CDC remains diagnostic-only.
+Active tests are commissioning operations, not automatic closed-loop admission. The CLI asks for explicit confirmation unless `--yes` is supplied. Firmware maintenance authority is distinct from closed-loop authority, and `SAFE_OFF` / lease expiry do not depend on the host continuing to run.
