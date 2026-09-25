@@ -31,7 +31,7 @@ TB6612 electrical mapping
 RP2350 PWM + direction backend
 ```
 
-The production control path remains available for parity with `main`. Physical commissioning is deliberately simpler: the host can send a direct normalized motor test command over HID. Firmware only checks the normalized range and expires stale host commands after a short timeout.
+The production control path remains available for parity with `main`. For physical testing, the host sends direct normalized motor commands over HID. Firmware only checks the normalized range and expires stale commands after a short timeout.
 
 ## Canonical mapping
 
@@ -44,9 +44,7 @@ The production control path remains available for parity with `main`. Physical c
 | `ARM_ENCODER_B` | D2 / ENCODER1_B | 2 |
 | `PENDULUM_ANGLE_ADC` | A0 / ADC0 | 26 |
 
-Motor channel A is used (`MA+`, `MA-`, `ENCODER1_A`, `ENCODER1_B`).
-
-The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ quadrature decoding.
+Motor channel A is used (`MA+`, `MA-`, `ENCODER1_A`, `ENCODER1_B`). The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ quadrature decoding.
 
 ## Runtime and timing
 
@@ -58,7 +56,7 @@ The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ qua
 
 Current calibration/controller constants intentionally preserve the STM32 live-shadow baseline until specimen commissioning, including the 1040 count/rev encoder scale and existing swing-up/capture/balance constants.
 
-## USB and commissioning
+## USB and testing
 
 ```text
 USB
@@ -88,11 +86,11 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-HID telemetry is 100 Hz while the runtime remains 1 kHz. The report includes raw ADC, Encoder1 A/B logic states, accumulated encoder count, estimated state, applied motor command, and timing evidence.
+HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder1 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
 
-`SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. The default test amplitudes are much smaller. A short timeout remains so a stopped host does not leave an old command applied; there is no extra commissioning state machine or firmware slew limiter.
+`SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. Default test amplitudes are much smaller. The stale-command timeout is the only extra guard in this test path; there is no commissioning mode handshake or firmware slew limiter.
 
-The host-side entry point is:
+Host entry point:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
@@ -114,9 +112,7 @@ build/rp2350a/rip_rp2350a.bin
 build/rp2350a/rip_rp2350a.uf2
 ```
 
-## Physical commissioning
-
-The finished image and unified tool are used to:
+## Physical tests
 
 1. observe pendulum ADC raw range and calibration;
 2. read Encoder1 A/B, count, arm position and velocity while the motor turns;
