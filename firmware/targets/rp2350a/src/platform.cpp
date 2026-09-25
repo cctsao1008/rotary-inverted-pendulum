@@ -16,6 +16,7 @@ namespace {
 
 volatile std::int32_t g_encoder_count = 0;
 volatile std::uint8_t g_encoder_state = 0;
+volatile std::uint32_t g_encoder_illegal_transitions = 0;
 uint g_pwm_slice = 0;
 uint g_pwm_channel = 0;
 std::uint16_t g_pwm_wrap = 0;
@@ -37,9 +38,14 @@ std::uint8_t read_encoder_state() {
 void encoder_irq(uint gpio, std::uint32_t events) {
     (void)gpio;
     (void)events;
+    const std::uint8_t previous = g_encoder_state;
     const std::uint8_t next = read_encoder_state();
-    const std::uint8_t transition = static_cast<std::uint8_t>((g_encoder_state << 2) | next);
-    g_encoder_count += kQuadratureDelta[transition & 0x0fu];
+    const std::uint8_t transition = static_cast<std::uint8_t>((previous << 2) | next);
+    const std::int8_t delta = kQuadratureDelta[transition & 0x0fu];
+    if (next != previous && delta == 0) {
+        ++g_encoder_illegal_transitions;
+    }
+    g_encoder_count += delta;
     g_encoder_state = next;
 }
 
@@ -52,7 +58,6 @@ void set_pwm_fraction(float duty) {
 }  // namespace
 
 void init() {
-    // Safety boundary first: no higher-level initialization precedes safe-off.
     board::init_safe_idle();
 
     adc_init();
@@ -85,7 +90,6 @@ void init() {
     set_pwm_fraction(0.0f);
     pwm_set_enabled(g_pwm_slice, true);
 
-    // Direction pins were already driven low by board::init_safe_idle().
     scheduler_init();
 }
 
@@ -97,6 +101,7 @@ std::uint16_t read_pendulum_adc() {
 }
 
 std::int32_t read_arm_encoder_count() { return g_encoder_count; }
+std::uint32_t encoder_illegal_transition_count() { return g_encoder_illegal_transitions; }
 
 void safe_off() {
     set_pwm_fraction(0.0f);
@@ -105,7 +110,6 @@ void safe_off() {
 }
 
 void apply_tb6612(const Tb6612ElectricalActuation& frame) {
-    // Break-before-make: direction never changes with non-zero PWM authority.
     set_pwm_fraction(0.0f);
 
     switch (frame.mode) {
@@ -154,7 +158,6 @@ SchedulerEvidence wait_next_opportunity() {
         const std::uint32_t missed = static_cast<std::uint32_t>(late / config::kControlPeriodUs);
         g_scheduler_evidence.missed_opportunities += missed;
         ++g_scheduler_evidence.deadline_overruns;
-        // Do not replay missed control opportunities as a burst.
         g_next_opportunity_us = actual + config::kControlPeriodUs;
     } else {
         g_next_opportunity_us += config::kControlPeriodUs;
