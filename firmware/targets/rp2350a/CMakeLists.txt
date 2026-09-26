@@ -30,10 +30,6 @@ add_executable(rip_rp2350a
     src/usb_descriptors.c
 )
 
-pico_generate_pio_header(rip_rp2350a
-    ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio
-)
-
 target_include_directories(rip_rp2350a PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include
 )
