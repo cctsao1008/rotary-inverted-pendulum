@@ -40,6 +40,15 @@ class HidCommand(IntEnum):
     SAFE_OFF = 0x13
     SET_USER_LED = 0x20
     ENTER_USB_BOOTLOADER = 0x21
+    SET_NEOPIXEL = 0x22
+
+
+class NeopixelColor(IntEnum):
+    OFF = 0
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+    WHITE = 4
 
 
 class HidStatus(IntEnum):
