@@ -30,4 +30,6 @@ void init_safe_idle() {
     configure_output_low(kNeopixelGpio);
 }
 
+void set_user_led(bool on) { gpio_put(kUserLedGpio, on ? 1 : 0); }
+
 }  // namespace rip::board
