@@ -6,6 +6,12 @@ One host-side tool owns RP2350A testing over HID + CDC.
 python tools/rp2350_commission/rp2350_commission.py <command>
 ```
 
+For motor/encoder characterization, prefer the one-shot suite instead of running each experiment manually:
+
+```bash
+python tools/rp2350_motor_suite.py
+```
+
 Commands:
 
 ```text
@@ -43,13 +49,16 @@ python tools/rp2350_commission/rp2350_commission.py neopixel white
 python tools/rp2350_commission/rp2350_commission.py neopixel off
 python tools/rp2350_commission/rp2350_commission.py bootloader
 python tools/rp2350_commission/rp2350_commission.py monitor --duration 10
-python tools/rp2350_commission/rp2350_commission.py monitor --motor-command 0.10 --duration 3
-python tools/rp2350_commission/rp2350_commission.py motor --command 0.15 --duration 2
-python tools/rp2350_commission/rp2350_commission.py encoder --motor-command 0.10 --duration 3
+python tools/rp2350_commission/rp2350_commission.py monitor --motor-command 0.30 --duration 3
+python tools/rp2350_commission/rp2350_commission.py motor --command 0.30 --duration 2
+python tools/rp2350_commission/rp2350_commission.py encoder --motor-command 0.30 --duration 3
 python tools/rp2350_commission/rp2350_commission.py free-swing --duration 10
 python tools/rp2350_commission/rp2350_commission.py breakaway
 python tools/rp2350_commission/rp2350_commission.py speed-sweep
-python tools/rp2350_commission/rp2350_commission.py coast-down --command 0.20
+python tools/rp2350_commission/rp2350_commission.py coast-down --command 0.40
+python tools/rp2350_commission/rp2350_commission.py step-response --amplitude 0.30
+python tools/rp2350_commission/rp2350_commission.py chirp --amplitude 0.30
+python tools/rp2350_commission/rp2350_commission.py prbs --amplitude 0.30
 python tools/rp2350_commission/rp2350_commission.py all
 ```
 
@@ -81,9 +90,22 @@ CDC carries debug/status/log text. HID carries commands and 100 Hz binary teleme
 
 `encoder --motor-command ...` is the direct live encoder check: the tool rotates the arm while recording A/B, count, position, velocity, and applied command. `monitor --motor-command ...` prints the same live signals while directly driving the motor.
 
+## Motor-characterization baseline
+
+The 2026-09-26 one-shot suite established these host-side defaults for this specimen:
+
+- `motor-direction`: `±0.30`, well inside the repeatable running region.
+- `speed-sweep`: dense points around the `0.18–0.25` transition plus `0.30/0.40/0.50` running points in both directions.
+- `coast-down`: `±0.40` run-up.
+- `step-response`, `chirp`, and `prbs`: `±0.30` excitation.
+
+The earlier `0.10` excitation default is no longer used for SysID because commissioning showed that it lies inside the position-dependent stiction region and can intermittently move or remain stationary.
+
+`breakaway` is intentionally a **first detectable motion** experiment. It is not a repeatable static-friction calibration: the observed threshold changed with rotor/gear position and recent motion. The firmware's automatic-control friction handling therefore uses separate running-region and stationary-start concepts instead of treating one breakaway result as a universal deadzone.
+
 Characterization commands are host-side experiments; firmware only supplies primitive motor command and telemetry paths:
 
-- `breakaway`: ramp normalized command in both directions and report the first level that produces encoder motion.
+- `breakaway`: ramp normalized command in both directions and report the first level that produces detectable encoder motion.
 - `speed-sweep`: map normalized command to steady arm speed.
 - `coast-down`: drive to speed, command zero/coast, and record the decay trace.
 - `free-swing`: keep the motor off and record passive pendulum ADC motion. A period/frequency is only reported when the trace passes diagnostic validity gates: sufficient ADC excursion, excursion larger than sample-to-sample noise, Schmitt-style hysteretic crossings, enough telemetry samples per candidate period, at least two resolved periods, and consistent period spacing. Floating/noise-only input therefore returns `estimate_valid=false` and leaves the period/frequency null instead of manufacturing a frequency.
@@ -91,7 +113,9 @@ Characterization commands are host-side experiments; firmware only supplies prim
 
 The free-swing validity gates are intentionally measurement-quality checks, not pendulum calibration or a plant-model assumption. Raw samples and the diagnostic fields (`estimate_reason`, ADC excursion, median step, hysteresis, crossing counts, and period consistency) are still recorded when no period is accepted.
 
-`all` runs the characterization sequence directly, without interactive confirmation prompts. It uses a small `+0.10` motor command during encoder capture by default. Override it with `all --encoder-command <value>`; adjust passive pendulum capture with `--free-swing-duration` and ADC/encoder windows with `--sensor-duration`.
+`rp2350_motor_suite.py` runs direction, breakaway, dense speed sweep, positive and negative coast-down, step response, chirp, PRBS, plus pre/post status in one invocation. A failure in one section is recorded and the suite continues after requesting `SAFE_OFF`; individual raw artifacts remain available for offline analysis.
+
+`all` runs the broader commissioning sequence directly, without interactive confirmation prompts. Its encoder capture now defaults to `+0.30`; passive pendulum capture remains separate because the pendulum sensor/mechanism has not yet been commissioned. Override with `all --encoder-command <value>` and adjust windows with `--sensor-duration` / `--free-swing-duration`.
 
 Active tests call `SAFE_OFF` when they finish, and the firmware timeout stops a stale command if the host disappears.
 
