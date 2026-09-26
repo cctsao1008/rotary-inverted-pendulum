@@ -26,6 +26,7 @@ class Rp2350Device:
         self.cdc_available = False
         self._sequence = 1
         self._telemetry_queue: deque[TelemetrySample] = deque()
+        self._bootloader_requested = False
 
     def open(self) -> None:
         self.hid.open()
@@ -39,10 +40,11 @@ class Rp2350Device:
                 raise
 
     def close(self) -> None:
-        with suppress(Exception):
-            self.safe_off()
-        with suppress(Exception):
-            self.stop_telemetry()
+        if not self._bootloader_requested:
+            with suppress(Exception):
+                self.safe_off()
+            with suppress(Exception):
+                self.stop_telemetry()
         self.cdc.close()
         self.hid.close()
         self.cdc_available = False
@@ -163,3 +165,4 @@ class Rp2350Device:
 
     def enter_usb_bootloader(self) -> None:
         self.command(HidCommand.ENTER_USB_BOOTLOADER, timeout_s=2.0)
+        self._bootloader_requested = True
