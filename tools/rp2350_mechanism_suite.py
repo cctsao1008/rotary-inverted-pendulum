@@ -59,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     results: dict[str, object] = {
         "test": "mechanism-suite",
         "plan": {
+            "pendulum_sensor_supply_v": 3.3,
+            "pendulum_sensor_signal": "A0/GPIO26/ADC0",
             "pose_duration_s": args.pose_duration,
             "sweep_duration_s": args.sweep_duration,
             "free_swing_duration_s": args.free_swing_duration,
@@ -76,12 +78,17 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "Installed-mechanism commissioning\n"
         "- clamp the base securely\n"
-        "- connect the 12 V motor supply and pendulum angle sensor\n"
+        "- connect the 12 V motor supply\n"
+        "- pendulum sensor MUST be powered from RP2350 3.3 V, not shield VCC50/5 V\n"
+        "- sensor wiper/signal -> A0 / GPIO26 / ADC0, with common GND\n"
         "- fit the pendulum protection sleeve / clear the swing envelope\n"
         "- this run never requests closed-loop balance or swing-up\n"
         "- motor excitation is position-bounded around the starting arm pose"
     )
-    _prompt("Prepare the mechanism with the pendulum hanging freely downward and motionless.")
+    _prompt(
+        "Confirm the angle sensor is on 3.3 V (NOT VCC50/5 V), then prepare the "
+        "mechanism with the pendulum hanging freely downward and motionless."
+    )
 
     with Rp2350Device(hid_path=args.hid_path, cdc_port=args.cdc_port) as device:
         sections: dict[str, object] = results["sections"]  # type: ignore[assignment]
@@ -121,7 +128,8 @@ def main(argv: list[str] | None = None) -> int:
 
         _prompt(
             "Return the pendulum downward. During the next capture, slowly rotate the pendulum "
-            "through one complete 360-degree revolution so the potentiometer span is observed."
+            "through one complete 360-degree revolution so the potentiometer span and dead zone "
+            "are observed."
         )
         _countdown(3, "GO: perform one slow full pendulum revolution now.")
         run(
@@ -139,7 +147,8 @@ def main(argv: list[str] | None = None) -> int:
             f"valid={calibration_ok}, "
             f"down={calibration.get('down_adc_mean')}, "
             f"upright={calibration.get('upright_adc_mean')}, "
-            f"sweep_pp={calibration.get('sweep_adc_peak_to_peak')}",
+            f"sweep_pp={calibration.get('sweep_adc_peak_to_peak')}, "
+            f"reason={calibration_preview.get('reason')}",
             flush=True,
         )
         if not calibration_ok:
