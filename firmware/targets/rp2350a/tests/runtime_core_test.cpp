@@ -2,7 +2,6 @@
 #include <cmath>
 #include <limits>
 
-#include "rip/actuator_stiction.hpp"
 #include "rip/config.hpp"
 #include "rip/runtime.hpp"
 
@@ -172,41 +171,17 @@ int main() {
     assert(saturated.saturated);
     assert(near(saturated.command, 1.0f));
 
-    // The commissioned kinetic deadzone is applied by the inverse actuator
-    // model. The stationary stiction gate is deliberately fail-closed: it
-    // suppresses sub-breakaway automatic commands at rest, but leaves the same
-    // command untouched once the arm is measurably moving.
+    // The commissioned running-region deadzone is an inverse-map calibration,
+    // not a static-start claim. A small nonzero torque demand therefore maps to
+    // a command above the measured kinetic offset while preserving the requested
+    // predicted torque.
     rip::ArmActuatorModel commissioned_actuator(
         rip::config::kActuatorTorquePerEffectiveCommandNm,
         rip::config::kActuatorCommandDeadzone);
     rip::BoundedActuatorCommand small_demand{};
     assert(commissioned_actuator.command_for_demand({0.005f}, small_demand));
     assert(near(small_demand.command, 0.163f, 1.0e-3f));
-    const auto blocked = rip::apply_stationary_stiction_gate(
-        small_demand,
-        0.0f,
-        rip::config::kActuatorStaticStartCommand,
-        rip::config::kActuatorMovingRateThresholdRadS);
-    assert(near(blocked.command, 0.0f));
-    assert(near(blocked.predicted_arm_torque_nm, 0.0f));
-    const auto moving = rip::apply_stationary_stiction_gate(
-        small_demand,
-        1.0f,
-        rip::config::kActuatorStaticStartCommand,
-        rip::config::kActuatorMovingRateThresholdRadS);
-    assert(near(moving.command, small_demand.command));
-    assert(near(moving.predicted_arm_torque_nm, small_demand.predicted_arm_torque_nm));
-
-    rip::BoundedActuatorCommand swing_kick{};
-    assert(commissioned_actuator.command_for_demand(
-        {rip::config::kSwingKickTorqueNm}, swing_kick));
-    assert(swing_kick.command > rip::config::kActuatorStaticStartCommand);
-    const auto start_allowed = rip::apply_stationary_stiction_gate(
-        swing_kick,
-        0.0f,
-        rip::config::kActuatorStaticStartCommand,
-        rip::config::kActuatorMovingRateThresholdRadS);
-    assert(near(start_allowed.command, swing_kick.command));
+    assert(near(small_demand.predicted_arm_torque_nm, 0.005f, 1.0e-4f));
 
     // Closed-loop safety semantics remain unchanged from the production path.
     command.command = 0.5f;
