@@ -30,6 +30,10 @@ add_executable(rip_rp2350a
     src/usb_descriptors.c
 )
 
+pico_generate_pio_header(rip_rp2350a
+    ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio
+)
+
 target_include_directories(rip_rp2350a PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include
 )
@@ -40,6 +44,7 @@ target_link_libraries(rip_rp2350a PRIVATE
     hardware_adc
     hardware_clocks
     hardware_gpio
+    hardware_pio
     hardware_pwm
     hardware_watchdog
     tinyusb_device
