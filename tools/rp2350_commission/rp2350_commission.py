@@ -7,8 +7,18 @@ import sys
 
 from device import Rp2350Device
 import motor
+from protocol import NeopixelColor
 import sensors
 import sysid
+
+
+_NEOPIXEL_COLORS = {
+    "off": NeopixelColor.OFF,
+    "red": NeopixelColor.RED,
+    "green": NeopixelColor.GREEN,
+    "blue": NeopixelColor.BLUE,
+    "white": NeopixelColor.WHITE,
+}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -26,6 +36,9 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("led", help="control the onboard D13 blue user LED")
     p.add_argument("state", choices=("on", "off"))
+
+    p = sub.add_parser("neopixel", help="control the onboard GPIO14 WS2812 RGB LED")
+    p.add_argument("color", choices=tuple(_NEOPIXEL_COLORS))
 
     p = sub.add_parser("monitor")
     p.add_argument("--duration", type=float, default=10.0)
@@ -120,6 +133,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "led":
             on = args.state == "on"
             _print({"user_led": "on" if device.set_user_led(on) else "off"})
+        elif args.action == "neopixel":
+            color = device.set_neopixel(_NEOPIXEL_COLORS[args.color])
+            _print({"neopixel": color.name.lower()})
         elif args.action == "monitor":
             _print(
                 sensors.monitor(
