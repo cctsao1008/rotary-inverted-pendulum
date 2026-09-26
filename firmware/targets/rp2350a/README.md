@@ -91,6 +91,7 @@ TELEMETRY_OFF
 SET_MOTOR_COMMAND
 SAFE_OFF
 SET_USER_LED
+ENTER_USB_BOOTLOADER
 ```
 
 HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder2 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
@@ -104,19 +105,21 @@ python tools/rp2350_commission/rp2350_commission.py led on
 python tools/rp2350_commission/rp2350_commission.py led off
 ```
 
+`ENTER_USB_BOOTLOADER` first drives the motor path to safe-off, acknowledges the HID command, then reboots the RP2350 into its ROM USB bootloader with the mass-storage interface disabled and PICOBOOT left enabled. This is the normal development firmware-update path once the feature has been bootstrapped onto the board.
+
 Host entry point:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
 ```
 
-## Build and flash
+## Build and firmware update
 
 On Windows, after Pico SDK and the prebuilt picotool package are available under `_deps`, use the thin helper scripts from the repository root:
 
 ```powershell
 .\tools\rp2350_build.ps1
-.\tools\rp2350_flash.ps1
+.\tools\rp2350_update.ps1
 ```
 
 `rp2350_build.ps1` automatically uses `_deps/pico-sdk` when `PICO_SDK_PATH` is not already set, locates `picotoolConfig.cmake` under `_deps`, configures the Release Ninja build, builds the target, and verifies the ELF/BIN/UF2 outputs. Use `-Clean` when a fresh CMake configure is needed:
@@ -125,7 +128,13 @@ On Windows, after Pico SDK and the prebuilt picotool package are available under
 .\tools\rp2350_build.ps1 -Clean
 ```
 
-`rp2350_flash.ps1` finds the `RPI-RP2` BOOTSEL drive and copies the generated UF2. Put the board in BOOTSEL mode before running it. A different UF2 may be supplied with `-Uf2 <path>`.
+`rp2350_update.ps1` uses the running application HID interface to request a safe reboot into ROM PICOBOOT, waits for picotool access, programs only changed flash sectors from the ELF image, verifies the result, reboots the application, and waits for HID/CDC to return. Build and update can be combined:
+
+```powershell
+.\tools\rp2350_update.ps1 -Build
+```
+
+The legacy `rp2350_flash.ps1` BOOTSEL/UF2 path remains as a bootstrap and recovery mechanism. A board running firmware from before `ENTER_USB_BOOTLOADER` support needs one final BOOTSEL/UF2 flash to install the new updater-capable image; normal later updates do not require BOOTSEL or an `RPI-RP2` drive.
 
 The equivalent manual build is:
 
@@ -142,6 +151,8 @@ build/rp2350a/rip_rp2350a.elf
 build/rp2350a/rip_rp2350a.bin
 build/rp2350a/rip_rp2350a.uf2
 ```
+
+The normal updater programs `rip_rp2350a.elf`; UF2 is retained for recovery.
 
 ## Physical tests
 
