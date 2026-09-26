@@ -101,9 +101,9 @@ void init_safe_idle() {
     configure_output_low(kArmMotorIn1Gpio);
     configure_output_low(kArmMotorIn2Gpio);
 
-    // Unused motor channel A. D13 is also the onboard blue user LED; PWMA is
-    // held low so later LED activity cannot create channel-A motor output.
-    configure_output_low(kUnusedMotorAPwmGpio);
+    // Unused motor channel A. D10/PWMA is shared with Encoder2_A and therefore
+    // must remain available as an input. Keep AIN1/AIN2 equal instead: with
+    // D13/D12 both low the bridge is non-driving regardless of PWMA activity.
     configure_output_low(kUnusedMotorAIn2Gpio);
     configure_output_low(kUserLedGpio);
 
@@ -113,7 +113,13 @@ void init_safe_idle() {
     set_neopixel(NeopixelColor::Off);
 }
 
-void set_user_led(bool on) { gpio_put(kUserLedGpio, on ? 1 : 0); }
+void set_user_led(bool on) {
+    const int level = on ? 1 : 0;
+    // D13 is AIN1 as well as the onboard user LED. Mirror AIN2 so the unused
+    // channel-A H-bridge cannot acquire a drive direction while the LED is on.
+    gpio_put(kUnusedMotorAIn2Gpio, level);
+    gpio_put(kUserLedGpio, level);
+}
 
 void set_neopixel(NeopixelColor color) {
     switch (color) {
