@@ -23,6 +23,9 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("status")
     sub.add_parser("safe-off")
 
+    p = sub.add_parser("led", help="control the onboard D13 blue user LED")
+    p.add_argument("state", choices=("on", "off"))
+
     p = sub.add_parser("monitor")
     p.add_argument("--duration", type=float, default=10.0)
     p.add_argument("--motor-command", type=float)
@@ -38,7 +41,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--motor-command",
         type=float,
-        help="optionally rotate the arm while capturing Encoder1 A/B/count",
+        help="optionally rotate the arm while capturing Encoder2 A/B/count",
     )
 
     p = sub.add_parser("motor")
@@ -110,6 +113,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "safe-off":
             device.safe_off()
             _print({"safe_off": True})
+        elif args.action == "led":
+            on = args.state == "on"
+            _print({"user_led": "on" if device.set_user_led(on) else "off"})
         elif args.action == "monitor":
             _print(
                 sensors.monitor(
