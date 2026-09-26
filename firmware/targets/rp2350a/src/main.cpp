@@ -1,6 +1,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "pico/bootrom.h"
+#include "pico/stdlib.h"
 #include "rip/board.hpp"
 #include "rip/commissioning.hpp"
 #include "rip/config.hpp"
@@ -22,7 +24,8 @@ struct CommissioningMotor {
     }
 };
 
-void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& motor) {
+void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& motor,
+                           bool& enter_usb_bootloader) {
     rip::commissioning::Request request{};
     while (rip::commissioning::take_request(request)) {
         const std::uint64_t now_us = rip::platform::now_us();
@@ -81,12 +84,36 @@ void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& mot
                                                on ? 1.0f : 0.0f, 0.0f);
                 break;
             }
+            case rip::commissioning::Command::EnterUsbBootloader:
+                motor.clear();
+                rip::platform::safe_off();
+                enter_usb_bootloader = true;
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
+                break;
             default:
                 rip::commissioning::queue_ack(request, rip::commissioning::Status::Invalid);
                 break;
         }
     }
     rip::commissioning::service();
+}
+
+[[noreturn]] void enter_usb_bootloader() {
+    rip::platform::safe_off();
+
+    // Give the HID acknowledgement time to leave the device before the USB
+    // controller is handed back to the RP2350 ROM. Keep the hardware watchdog
+    // serviced while TinyUSB flushes the final report.
+    for (int i = 0; i < 50; ++i) {
+        rip::usb::task();
+        rip::commissioning::service();
+        rip::platform::watchdog_feed();
+        sleep_ms(1);
+    }
+
+    // Keep PICOBOOT enabled but suppress the mass-storage interface. Host-side
+    // updates use picotool directly, so no RPI-RP2 drive is required.
+    rom_reset_usb_boot(0, 1);
 }
 
 rip::BoundedActuatorCommand direct_commissioning_command(float command) {
@@ -114,6 +141,7 @@ int main() {
     rip::MeasurementAdapter adapter;
     rip::ControlRuntime runtime;
     CommissioningMotor commissioning_motor;
+    bool usb_bootloader_requested = false;
 
     rip::RuntimeSnapshot snapshot{};
     rip::usb::set_snapshot_source(&snapshot);
@@ -124,7 +152,8 @@ int main() {
 
     while (true) {
         rip::usb::task();
-        service_commissioning(runtime, commissioning_motor);
+        service_commissioning(runtime, commissioning_motor, usb_bootloader_requested);
+        if (usb_bootloader_requested) enter_usb_bootloader();
 
         const rip::platform::SchedulerEvidence scheduler = rip::platform::wait_next_opportunity();
         const std::uint64_t cycle_started = rip::platform::now_us();
@@ -200,6 +229,7 @@ int main() {
 
         rip::platform::watchdog_feed();
         rip::usb::task();
-        service_commissioning(runtime, commissioning_motor);
+        service_commissioning(runtime, commissioning_motor, usb_bootloader_requested);
+        if (usb_bootloader_requested) enter_usb_bootloader();
     }
 }
