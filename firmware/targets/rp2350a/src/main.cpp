@@ -84,6 +84,22 @@ void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& mot
                                                on ? 1.0f : 0.0f, 0.0f);
                 break;
             }
+            case rip::commissioning::Command::SetNeopixel: {
+                if (!std::isfinite(request.value0)) {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Range);
+                    break;
+                }
+                const int color = static_cast<int>(request.value0);
+                if (color < 0 || color > static_cast<int>(rip::board::NeopixelColor::White) ||
+                    request.value0 != static_cast<float>(color)) {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Range);
+                    break;
+                }
+                rip::board::set_neopixel(static_cast<rip::board::NeopixelColor>(color));
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, 0,
+                                               static_cast<float>(color), 0.0f);
+                break;
+            }
             case rip::commissioning::Command::EnterUsbBootloader:
                 motor.clear();
                 rip::platform::safe_off();
