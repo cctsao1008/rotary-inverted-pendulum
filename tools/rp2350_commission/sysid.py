@@ -44,7 +44,7 @@ def _stream_command(
 def step_response(
     device: Rp2350Device,
     *,
-    amplitude: float = 0.10,
+    amplitude: float = 0.30,
     hold_s: float = 1.5,
 ) -> dict[str, object]:
     device.start_telemetry()
@@ -72,7 +72,7 @@ def step_response(
 def chirp(
     device: Rp2350Device,
     *,
-    amplitude: float = 0.10,
+    amplitude: float = 0.30,
     f0_hz: float = 0.2,
     f1_hz: float = 8.0,
     duration_s: float = 20.0,
@@ -112,7 +112,7 @@ def chirp(
 def prbs(
     device: Rp2350Device,
     *,
-    amplitude: float = 0.10,
+    amplitude: float = 0.30,
     interval_s: float = 0.20,
     duration_s: float = 20.0,
     seed: int = 1,
