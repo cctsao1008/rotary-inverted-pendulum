@@ -12,6 +12,7 @@ enum class Command : std::uint8_t {
     TelemetryOff = 0x03,
     SetMotorCommand = 0x12,
     SafeOff = 0x13,
+    SetUserLed = 0x20,
 };
 
 enum class Status : std::uint8_t {
