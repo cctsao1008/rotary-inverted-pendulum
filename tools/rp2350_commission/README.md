@@ -11,6 +11,7 @@ Commands:
 ```text
 status
 safe-off
+led
 monitor
 adc
 free-swing
@@ -31,6 +32,8 @@ Examples:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py status
+python tools/rp2350_commission/rp2350_commission.py led on
+python tools/rp2350_commission/rp2350_commission.py led off
 python tools/rp2350_commission/rp2350_commission.py monitor --duration 10
 python tools/rp2350_commission/rp2350_commission.py monitor --motor-command 0.10 --duration 3
 python tools/rp2350_commission/rp2350_commission.py motor --command 0.15 --duration 2
@@ -42,7 +45,9 @@ python tools/rp2350_commission/rp2350_commission.py coast-down --command 0.20
 python tools/rp2350_commission/rp2350_commission.py all
 ```
 
-HID commands are deliberately small: `GET_STATUS`, `TELEMETRY_ON`, `TELEMETRY_OFF`, `SET_MOTOR_COMMAND`, and `SAFE_OFF`.
+HID commands are deliberately small: `GET_STATUS`, `TELEMETRY_ON`, `TELEMETRY_OFF`, `SET_MOTOR_COMMAND`, `SAFE_OFF`, and `SET_USER_LED`.
+
+`SET_USER_LED` directly controls the UNO RP2350 onboard blue user LED on D13/GPIO13. The active motor uses TB6612 channel B, while unused channel-A PWMA/D6 is held low, so toggling D13 cannot actuate motor channel A.
 
 `SET_MOTOR_COMMAND` directly controls normalized motor command. Firmware checks `[-1.0, +1.0]` and expires stale commands after a short timeout. There is no extra test-mode handshake, arming sequence, maintenance-authority layer, or firmware slew limiter.
 
