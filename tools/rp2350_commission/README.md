@@ -13,6 +13,7 @@ status
 safe-off
 bootloader
 led
+neopixel
 monitor
 adc
 free-swing
@@ -35,6 +36,11 @@ Examples:
 python tools/rp2350_commission/rp2350_commission.py status
 python tools/rp2350_commission/rp2350_commission.py led on
 python tools/rp2350_commission/rp2350_commission.py led off
+python tools/rp2350_commission/rp2350_commission.py neopixel red
+python tools/rp2350_commission/rp2350_commission.py neopixel green
+python tools/rp2350_commission/rp2350_commission.py neopixel blue
+python tools/rp2350_commission/rp2350_commission.py neopixel white
+python tools/rp2350_commission/rp2350_commission.py neopixel off
 python tools/rp2350_commission/rp2350_commission.py bootloader
 python tools/rp2350_commission/rp2350_commission.py monitor --duration 10
 python tools/rp2350_commission/rp2350_commission.py monitor --motor-command 0.10 --duration 3
@@ -47,9 +53,11 @@ python tools/rp2350_commission/rp2350_commission.py coast-down --command 0.20
 python tools/rp2350_commission/rp2350_commission.py all
 ```
 
-HID commands are deliberately small: `GET_STATUS`, `TELEMETRY_ON`, `TELEMETRY_OFF`, `SET_MOTOR_COMMAND`, `SAFE_OFF`, `SET_USER_LED`, and `ENTER_USB_BOOTLOADER`.
+HID commands are deliberately small: `GET_STATUS`, `TELEMETRY_ON`, `TELEMETRY_OFF`, `SET_MOTOR_COMMAND`, `SAFE_OFF`, `SET_USER_LED`, `ENTER_USB_BOOTLOADER`, and `SET_NEOPIXEL`.
 
 `SET_USER_LED` directly controls the UNO RP2350 onboard blue user LED on D13/GPIO13. The active motor uses TB6612 channel B, while unused channel-A PWMA/D6 is held low, so toggling D13 cannot actuate motor channel A.
+
+`SET_NEOPIXEL` drives the onboard GPIO14 WS2812 through a dedicated 800 kHz PIO state machine. The diagnostic interface deliberately exposes only `off`, `red`, `green`, `blue`, and `white` at low brightness; its purpose is to verify the complete host HID → firmware command → PIO → WS2812 signal path, not to introduce a general RGB status framework.
 
 `ENTER_USB_BOOTLOADER` clears any direct motor command, applies safe-off, returns an HID acknowledgement, then hands USB control to the RP2350 ROM bootloader. The ROM is entered with USB mass storage disabled and PICOBOOT enabled, so normal development updates do not mount an `RPI-RP2` drive.
 
