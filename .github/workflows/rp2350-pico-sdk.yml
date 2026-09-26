@@ -6,11 +6,15 @@ on:
     paths:
       - "firmware/targets/rp2350a/**"
       - "tools/rp2350_commission/**"
+      - "tools/rp2350_motor_suite.py"
+      - "tools/rp2350_mechanism_suite.py"
       - ".github/workflows/rp2350-pico-sdk.yml"
   pull_request:
     paths:
       - "firmware/targets/rp2350a/**"
       - "tools/rp2350_commission/**"
+      - "tools/rp2350_motor_suite.py"
+      - "tools/rp2350_mechanism_suite.py"
       - ".github/workflows/rp2350-pico-sdk.yml"
 
 permissions:
@@ -33,8 +37,11 @@ jobs:
       - name: Validate commissioning Python modules
         run: |
           python3 -m compileall -q tools/rp2350_commission
+          python3 -m py_compile tools/rp2350_motor_suite.py tools/rp2350_mechanism_suite.py
           PYTHONPATH=tools/rp2350_commission python3 -c "import protocol; assert protocol.HID_REPORT_SIZE == 64"
           python3 tools/rp2350_commission/rp2350_commission.py --help >/dev/null
+          python3 tools/rp2350_motor_suite.py --help >/dev/null
+          python3 tools/rp2350_mechanism_suite.py --help >/dev/null
 
       - name: Run commissioning protocol unit tests
         run: |
