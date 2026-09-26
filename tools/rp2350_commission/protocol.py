@@ -39,6 +39,7 @@ class HidCommand(IntEnum):
     SET_MOTOR_COMMAND = 0x12
     SAFE_OFF = 0x13
     SET_USER_LED = 0x20
+    ENTER_USB_BOOTLOADER = 0x21
 
 
 class HidStatus(IntEnum):
