@@ -21,6 +21,12 @@ def _artifact(section: object) -> Path | None:
     return Path(str(section["artifact_dir"]))
 
 
+def _has_fields(section: object, fields: tuple[str, ...]) -> bool:
+    return isinstance(section, dict) and "error" not in section and all(
+        field in section for field in fields
+    )
+
+
 def analyze_pendulum_calibration(
     down: dict[str, object],
     upright: dict[str, object],
@@ -93,7 +99,7 @@ def analyze_free_swing(
     if not isinstance(period, (int, float)) or period <= 0.0:
         return result
 
-    # Detect same-sign local extrema separated by at least half a period.  This is
+    # Detect same-sign local extrema separated by at least half a period. This is
     # deliberately a diagnostic log-decrement estimate, not a controller model.
     min_spacing = 0.55 * float(period)
     positive: list[tuple[float, float]] = []
@@ -187,30 +193,52 @@ def analyze_mechanism_suite(sections: dict[str, object]) -> dict[str, object]:
     down = sections.get("pendulum_down")
     upright = sections.get("pendulum_upright")
     sweep = sections.get("pendulum_sweep")
-    output: dict[str, object] = {}
-    if not isinstance(down, dict) or not isinstance(upright, dict) or not isinstance(sweep, dict):
-        return {"valid": False, "reason": "calibration_sections_missing"}
 
+    required_pose_fields = ("adc_mean", "adc_stdev")
+    required_sweep_fields = (
+        "adc_min",
+        "adc_max",
+        "adc_peak_to_peak",
+        "adc_fraction_of_12bit_span",
+    )
+    if not _has_fields(down, required_pose_fields):
+        return {"valid": False, "reason": "pendulum_down_missing_or_failed"}
+    if not _has_fields(upright, required_pose_fields):
+        return {"valid": False, "reason": "pendulum_upright_missing_or_failed"}
+    if not _has_fields(sweep, required_sweep_fields):
+        return {"valid": False, "reason": "pendulum_sweep_missing_or_failed"}
+
+    assert isinstance(down, dict)
+    assert isinstance(upright, dict)
+    assert isinstance(sweep, dict)
     calibration = analyze_pendulum_calibration(down, upright, sweep)
-    output["valid"] = bool(calibration["pose_separation_valid"] and calibration["sweep_span_valid"])
-    output["pendulum_calibration"] = calibration
+    output: dict[str, object] = {
+        "valid": bool(calibration["pose_separation_valid"] and calibration["sweep_span_valid"]),
+        "pendulum_calibration": calibration,
+    }
     rad_per_count = calibration.get("radians_per_count_local")
     rad_per_count_value = float(rad_per_count) if isinstance(rad_per_count, (int, float)) else None
     down_center = float(calibration["down_adc_mean"])
 
     free_swing = sections.get("free_swing")
     if isinstance(free_swing, dict):
-        output["free_swing"] = analyze_free_swing(
-            free_swing,
-            down_adc_center=down_center,
-            rad_per_count=rad_per_count_value,
-        )
+        if "error" in free_swing or free_swing.get("skipped"):
+            output["free_swing"] = dict(free_swing)
+        else:
+            output["free_swing"] = analyze_free_swing(
+                free_swing,
+                down_adc_center=down_center,
+                rad_per_count=rad_per_count_value,
+            )
 
     excitation = sections.get("bounded_excitation")
     if isinstance(excitation, dict):
-        output["bounded_excitation"] = analyze_bounded_excitation(
-            excitation,
-            down_adc_center=down_center,
-            rad_per_count=rad_per_count_value,
-        )
+        if "error" in excitation or excitation.get("skipped"):
+            output["bounded_excitation"] = dict(excitation)
+        else:
+            output["bounded_excitation"] = analyze_bounded_excitation(
+                excitation,
+                down_adc_center=down_center,
+                rad_per_count=rad_per_count_value,
+            )
     return output
