@@ -38,6 +38,7 @@ class HidCommand(IntEnum):
     TELEMETRY_OFF = 0x03
     SET_MOTOR_COMMAND = 0x12
     SAFE_OFF = 0x13
+    SET_USER_LED = 0x20
 
 
 class HidStatus(IntEnum):
