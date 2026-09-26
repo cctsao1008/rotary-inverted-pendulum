@@ -59,6 +59,23 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(reserved0, 0)
         self.assertEqual(reserved, b"\x00" * 40)
 
+    def test_encode_enter_usb_bootloader_command_layout(self) -> None:
+        report = encode_command(HidCommand.ENTER_USB_BOOTLOADER, 10)
+        version, message_type, command, flags, sequence, value0, value1, duration_ms, reserved0, reserved = struct.unpack(
+            "<BBBBIffII40s", report
+        )
+        self.assertEqual(version, HID_SCHEMA)
+        self.assertEqual(message_type, 0x01)
+        self.assertEqual(command, 0x21)
+        self.assertEqual(command, int(HidCommand.ENTER_USB_BOOTLOADER))
+        self.assertEqual(flags, 0)
+        self.assertEqual(sequence, 10)
+        self.assertAlmostEqual(value0, 0.0)
+        self.assertAlmostEqual(value1, 0.0)
+        self.assertEqual(duration_ms, 0)
+        self.assertEqual(reserved0, 0)
+        self.assertEqual(reserved, b"\x00" * 40)
+
     def test_decode_ack(self) -> None:
         raw = struct.pack(
             "<BBBBIQffI36s",
