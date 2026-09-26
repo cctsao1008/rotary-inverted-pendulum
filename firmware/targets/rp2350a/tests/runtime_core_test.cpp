@@ -2,6 +2,7 @@
 #include <cmath>
 #include <limits>
 
+#include "rip/actuator_stiction.hpp"
 #include "rip/config.hpp"
 #include "rip/runtime.hpp"
 
@@ -56,6 +57,57 @@ int main() {
     assert(estimator.step(estimator_cfg, b, estimated) == rip::BasicEstimator::Result::Ready);
     assert(near(estimated.theta_dot, (2.0f * rip::config::kPi / 180.0f) / 0.01f, 1.0e-3f));
     assert(near(estimated.phi_dot, 10.0f, 1.0e-3f));
+
+    // The commissioned rate filter turns encoder-count impulses into a usable
+    // low-ripple rate estimate instead of exposing the 6.04 rad/s/count 1 kHz
+    // derivative directly.
+    rip::BasicEstimator quantized_encoder_estimator;
+    rip::EstimatorConfig commissioned_estimator_cfg{
+        rip::config::kEstimatorMaxGapUs,
+        rip::config::kEstimatorRateFilterAlpha,
+    };
+    constexpr float commanded_rate = 1.0f;
+    const float arm_count_rad = 2.0f * rip::config::kPi / rip::config::kArmEncoderCountsPerRevolution;
+    float encoder_rate_sum = 0.0f;
+    float encoder_rate_min = std::numeric_limits<float>::infinity();
+    float encoder_rate_max = -std::numeric_limits<float>::infinity();
+    int encoder_rate_samples = 0;
+    for (int i = 0; i < 1000; ++i) {
+        const float true_phi = commanded_rate * static_cast<float>(i) * 0.001f;
+        const float quantized_phi = std::round(true_phi / arm_count_rad) * arm_count_rad;
+        rip::EstimatorMeasurement sample{0.0f, quantized_phi,
+                                         {1000u + static_cast<std::uint64_t>(i) * 1000u}};
+        const auto result = quantized_encoder_estimator.step(
+            commissioned_estimator_cfg, sample, estimated);
+        if (result == rip::BasicEstimator::Result::Ready && i >= 500) {
+            encoder_rate_sum += estimated.phi_dot;
+            encoder_rate_min = std::min(encoder_rate_min, estimated.phi_dot);
+            encoder_rate_max = std::max(encoder_rate_max, estimated.phi_dot);
+            ++encoder_rate_samples;
+        }
+    }
+    assert(encoder_rate_samples > 400);
+    assert(near(encoder_rate_sum / static_cast<float>(encoder_rate_samples), commanded_rate, 0.03f));
+    assert(encoder_rate_min > 0.5f);
+    assert(encoder_rate_max < 1.5f);
+
+    // A one-count pendulum ADC toggle would be +/-1.53 rad/s with the old
+    // unfiltered one-sample derivative. The commissioned filter keeps the
+    // resulting stationary quantization ripple well below capture-rate scale.
+    rip::BasicEstimator quantized_pendulum_estimator;
+    float max_stationary_theta_rate = 0.0f;
+    for (int i = 0; i < 500; ++i) {
+        const float theta = (i & 1) ? rip::config::kPendulumRadiansPerCount : 0.0f;
+        rip::EstimatorMeasurement sample{theta, 0.0f,
+                                         {1000u + static_cast<std::uint64_t>(i) * 1000u}};
+        const auto result = quantized_pendulum_estimator.step(
+            commissioned_estimator_cfg, sample, estimated);
+        if (result == rip::BasicEstimator::Result::Ready && i >= 100) {
+            max_stationary_theta_rate =
+                std::max(max_stationary_theta_rate, std::fabs(estimated.theta_dot));
+        }
+    }
+    assert(max_stationary_theta_rate < 0.20f);
 
     // A gap beyond the configured estimator horizon re-primes rather than differentiating stale data.
     rip::BasicEstimator gap_estimator;
@@ -119,6 +171,42 @@ int main() {
     assert(actuator.command_for_demand({0.10f}, saturated));
     assert(saturated.saturated);
     assert(near(saturated.command, 1.0f));
+
+    // The commissioned kinetic deadzone is applied by the inverse actuator
+    // model. The stationary stiction gate is deliberately fail-closed: it
+    // suppresses sub-breakaway automatic commands at rest, but leaves the same
+    // command untouched once the arm is measurably moving.
+    rip::ArmActuatorModel commissioned_actuator(
+        rip::config::kActuatorTorquePerEffectiveCommandNm,
+        rip::config::kActuatorCommandDeadzone);
+    rip::BoundedActuatorCommand small_demand{};
+    assert(commissioned_actuator.command_for_demand({0.005f}, small_demand));
+    assert(near(small_demand.command, 0.163f, 1.0e-3f));
+    const auto blocked = rip::apply_stationary_stiction_gate(
+        small_demand,
+        0.0f,
+        rip::config::kActuatorStaticStartCommand,
+        rip::config::kActuatorMovingRateThresholdRadS);
+    assert(near(blocked.command, 0.0f));
+    assert(near(blocked.predicted_arm_torque_nm, 0.0f));
+    const auto moving = rip::apply_stationary_stiction_gate(
+        small_demand,
+        1.0f,
+        rip::config::kActuatorStaticStartCommand,
+        rip::config::kActuatorMovingRateThresholdRadS);
+    assert(near(moving.command, small_demand.command));
+    assert(near(moving.predicted_arm_torque_nm, small_demand.predicted_arm_torque_nm));
+
+    rip::BoundedActuatorCommand swing_kick{};
+    assert(commissioned_actuator.command_for_demand(
+        {rip::config::kSwingKickTorqueNm}, swing_kick));
+    assert(swing_kick.command > rip::config::kActuatorStaticStartCommand);
+    const auto start_allowed = rip::apply_stationary_stiction_gate(
+        swing_kick,
+        0.0f,
+        rip::config::kActuatorStaticStartCommand,
+        rip::config::kActuatorMovingRateThresholdRadS);
+    assert(near(start_allowed.command, swing_kick.command));
 
     // Closed-loop safety semantics remain unchanged from the production path.
     command.command = 0.5f;
