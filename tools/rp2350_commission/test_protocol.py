@@ -42,6 +42,23 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(reserved0, 0)
         self.assertEqual(reserved, b"\x00" * 40)
 
+    def test_encode_user_led_command_layout(self) -> None:
+        report = encode_command(HidCommand.SET_USER_LED, 9, value0=1.0)
+        version, message_type, command, flags, sequence, value0, value1, duration_ms, reserved0, reserved = struct.unpack(
+            "<BBBBIffII40s", report
+        )
+        self.assertEqual(version, HID_SCHEMA)
+        self.assertEqual(message_type, 0x01)
+        self.assertEqual(command, 0x20)
+        self.assertEqual(command, int(HidCommand.SET_USER_LED))
+        self.assertEqual(flags, 0)
+        self.assertEqual(sequence, 9)
+        self.assertAlmostEqual(value0, 1.0)
+        self.assertAlmostEqual(value1, 0.0)
+        self.assertEqual(duration_ms, 0)
+        self.assertEqual(reserved0, 0)
+        self.assertEqual(reserved, b"\x00" * 40)
+
     def test_decode_ack(self) -> None:
         raw = struct.pack(
             "<BBBBIQffI36s",
