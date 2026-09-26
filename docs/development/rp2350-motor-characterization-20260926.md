@@ -52,6 +52,8 @@ The dense speed sweep also showed that `±0.10` may move in one run while `±0.1
 - `breakaway` is a first-detectable-motion experiment, not a universal deadzone calibration;
 - automatic control should distinguish stationary start authority from already-moving friction compensation.
 
+The `+0.23` observation is retained as evidence only. It is not currently applied as an automatic start floor. A true stiction compensator should be introduced only after mechanism-level commissioning, where its interaction with controller output and slew limiting can be validated explicitly.
+
 ## Continuous-running region
 
 Using encoder-count slope over the steady half of each speed-sweep segment, the repeatable running region was approximately linear for `|command| >= 0.18`.
@@ -71,7 +73,7 @@ Representative values with the provisional 1040 count/rev scale:
 Linear fits over `0.18…0.50` were:
 
 ```text
-positive:  omega ≈ 56.19 * command - 3.68    R² ≈ 0.9991
+positive:  omega ≈ 56.19 * command - 3.68     R² ≈ 0.9991
 negative: |omega| ≈ 54.10 * |command| - 4.03 R² ≈ 0.9980
 ```
 
@@ -82,7 +84,7 @@ positive ≈ 0.065
 negative ≈ 0.074
 ```
 
-Their symmetric midpoint, `0.07`, is used as the RP2350 target's provisional kinetic command deadzone. This is an empirical friction compensation term; it does **not** establish the still-unmeasured torque span.
+Their symmetric midpoint, `0.07`, is used as the RP2350 target's provisional kinetic command deadzone. This is an empirical running-region friction compensation term; it does **not** establish the still-unmeasured torque span or static-start behavior.
 
 ## Coast-down
 
@@ -94,7 +96,14 @@ This evidence supports keeping a separate stationary-start concept instead of re
 
 ## Step, chirp, and PRBS
 
-The `±0.30` step data showed motor-side rise dynamics on the order of tens of milliseconds. A simple first-order-plus-delay description fitted to the chirp fundamental was approximately:
+The `±0.30` step data showed motor-side rise dynamics on the order of tens of milliseconds. Count-slope analysis of the same run gives approximately:
+
+```text
+positive t63 ≈ 50 ms, t90 ≈ 110 ms
+negative t63 ≈ 40 ms, t90 ≈ 100 ms
+```
+
+A simple first-order-plus-delay description fitted to the chirp fundamental was approximately:
 
 ```text
 K  ≈ 37 (rad/s) / normalized command
@@ -127,17 +136,21 @@ which corresponds to roughly a 9.5 ms discrete time constant / 16.8 Hz pole at t
 
 ## Actuator-side software decision
 
-The RP2350 automatic-control path now combines:
+Only the repeatable running-region evidence is applied automatically at this stage:
 
 ```text
-kinetic command deadzone      = 0.07
-stationary start floor        = 0.23
-moving-rate threshold         = 0.50 rad/s
+kinetic command deadzone = 0.07
 ```
 
-The `0.23` start value is deliberately conservative: it is the largest clearly observed positive start threshold in the commissioning sequence, not a universal plant constant. While the estimated arm is effectively stationary, automatic commands below this start floor are suppressed to zero. The gate only removes authority and therefore cannot defeat upstream command or slew limits.
+The larger static-start thresholds remain characterization evidence. They are intentionally **not** turned into a post-safety output gate, because suppressing intermediate slew-limited commands and then releasing them at a threshold would create an output discontinuity that no longer reflects the command-safety gate's slew history.
 
-Direct commissioning commands bypass the stationary gate so future characterization remains transparent.
+A future mechanism-level stiction compensator should therefore be state/history-aware and must sit on the correct side of the output-safety boundary so the physical command still obeys configured slew and magnitude limits.
+
+## Automatic offline analysis
+
+`tools/rp2350_motor_suite.py` now runs an offline analysis pass after data collection. The suite summary derives speed from encoder-count slope rather than quantized instantaneous `phi_dot`, fits the positive/negative running regions, reports the command-axis intercepts, extracts coast stop time/travel, computes step `t63/t90`, and aggregates runtime timing statistics.
+
+This keeps later repeated characterization to one command and one summary instead of requiring manual per-test post-processing.
 
 ## Runtime timing evidence
 
@@ -160,6 +173,7 @@ This motor-side run does not establish:
 - pendulum natural frequency;
 - coupled arm-pendulum parameters;
 - the `0.05 Nm` actuator torque-span placeholder;
+- static-start/stiction compensation with the installed mechanism;
 - LQR/capture performance;
 - swing-up and capture transition behavior.
 
