@@ -12,6 +12,7 @@ _TOOL_DIR = Path(__file__).resolve().parent / "rp2350_commission"
 sys.path.insert(0, str(_TOOL_DIR))
 
 from device import Rp2350Device  # noqa: E402
+from analysis import analyze_motor_suite  # noqa: E402
 import motor  # noqa: E402
 import sysid  # noqa: E402
 
@@ -144,6 +145,13 @@ def main(argv: list[str] | None = None) -> int:
             device.safe_off()
         except Exception:
             pass
+
+    print("[analysis]", file=sys.stderr, flush=True)
+    try:
+        sections = results["sections"]  # type: ignore[assignment]
+        results["analysis"] = analyze_motor_suite(sections)
+    except Exception as exc:
+        results["analysis"] = {"error": str(exc)}
 
     output = json.dumps(results, indent=2, default=str)
     (suite_dir / "summary.json").write_text(output + "\n", encoding="utf-8")
