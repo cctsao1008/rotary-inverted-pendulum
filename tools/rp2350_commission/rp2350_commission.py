@@ -22,6 +22,7 @@ def _parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status")
     sub.add_parser("safe-off")
+    sub.add_parser("bootloader", help="safe-off and reboot into ROM PICOBOOT over HID")
 
     p = sub.add_parser("led", help="control the onboard D13 blue user LED")
     p.add_argument("state", choices=("on", "off"))
@@ -113,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "safe-off":
             device.safe_off()
             _print({"safe_off": True})
+        elif args.action == "bootloader":
+            device.enter_usb_bootloader()
+            _print({"bootloader": "picoboot"})
         elif args.action == "led":
             on = args.state == "on"
             _print({"user_led": "on" if device.set_user_led(on) else "off"})
