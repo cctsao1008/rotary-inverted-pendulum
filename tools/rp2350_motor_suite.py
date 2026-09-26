@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import sys
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 _TOOL_DIR = Path(__file__).resolve().parent / "rp2350_commission"
 sys.path.insert(0, str(_TOOL_DIR))
 
@@ -47,6 +49,14 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    suite_dir = (
+        _REPO_ROOT
+        / "artifacts"
+        / "commissioning"
+        / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-motor-suite"
+    )
+    suite_dir.mkdir(parents=True, exist_ok=True)
+
     results: dict[str, object] = {
         "test": "motor-suite",
         "plan": {
@@ -60,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             "prbs": {"amplitude": 0.30, "interval_s": 0.20, "duration_s": 20.0, "seed": 1},
         },
         "sections": {},
+        "artifact_dir": str(suite_dir),
     }
 
     with Rp2350Device(hid_path=args.hid_path, cdc_port=args.cdc_port) as device:
@@ -134,7 +145,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
 
-    print(json.dumps(results, indent=2, default=str))
+    output = json.dumps(results, indent=2, default=str)
+    (suite_dir / "summary.json").write_text(output + "\n", encoding="utf-8")
+    print(output)
     return 0
 
 
@@ -142,5 +155,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except KeyboardInterrupt:
-        print("interrupted; requesting safe-off on device close", file=sys.stderr)
+        print("interrupted; device context requests safe-off while closing", file=sys.stderr)
         raise SystemExit(130)
