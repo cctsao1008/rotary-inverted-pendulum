@@ -14,6 +14,7 @@ enum class Command : std::uint8_t {
     SafeOff = 0x13,
     SetUserLed = 0x20,
     EnterUsbBootloader = 0x21,
+    SetNeopixel = 0x22,
 };
 
 enum class Status : std::uint8_t {
