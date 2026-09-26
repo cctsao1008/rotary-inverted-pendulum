@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include "rip/board.hpp"
 #include "rip/commissioning.hpp"
 #include "rip/config.hpp"
 #include "rip/platform.hpp"
@@ -68,6 +69,18 @@ void service_commissioning(rip::ControlRuntime& runtime, CommissioningMotor& mot
                 rip::platform::safe_off();
                 rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok);
                 break;
+            case rip::commissioning::Command::SetUserLed: {
+                if (!std::isfinite(request.value0) ||
+                    (request.value0 != 0.0f && request.value0 != 1.0f)) {
+                    rip::commissioning::queue_ack(request, rip::commissioning::Status::Range);
+                    break;
+                }
+                const bool on = request.value0 == 1.0f;
+                rip::board::set_user_led(on);
+                rip::commissioning::queue_ack(request, rip::commissioning::Status::Ok, 0,
+                                               on ? 1.0f : 0.0f, 0.0f);
+                break;
+            }
             default:
                 rip::commissioning::queue_ack(request, rip::commissioning::Status::Invalid);
                 break;
