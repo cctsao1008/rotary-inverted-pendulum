@@ -3,6 +3,7 @@
 
 #include "pico/bootrom.h"
 #include "pico/stdlib.h"
+#include "rip/actuator_stiction.hpp"
 #include "rip/board.hpp"
 #include "rip/commissioning.hpp"
 #include "rip/config.hpp"
@@ -213,7 +214,11 @@ int main() {
             applied_command = direct_commissioning_command(commissioning_motor.command);
             rip::platform::apply_tb6612(rip::map_tb6612(applied_command));
         } else if (cycle.kind == rip::ControlCycle::Kind::Computed && cycle.authorized) {
-            applied_command = cycle.bounded_command;
+            applied_command = rip::apply_stationary_stiction_gate(
+                cycle.bounded_command,
+                cycle.state.phi_dot,
+                rip::config::kActuatorStaticStartCommand,
+                rip::config::kActuatorMovingRateThresholdRadS);
             rip::platform::apply_tb6612(rip::map_tb6612(applied_command));
         } else {
             rip::platform::safe_off();
