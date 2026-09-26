@@ -90,11 +90,19 @@ TELEMETRY_ON
 TELEMETRY_OFF
 SET_MOTOR_COMMAND
 SAFE_OFF
+SET_USER_LED
 ```
 
 HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder2 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
 
 `SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. Default test amplitudes are much smaller. The stale-command timeout is the only extra guard in this test path; there is no commissioning mode handshake or firmware slew limiter.
+
+`SET_USER_LED` is a bare-board diagnostic command for the D13/GPIO13 blue onboard user LED. The host CLI exposes it directly:
+
+```bash
+python tools/rp2350_commission/rp2350_commission.py led on
+python tools/rp2350_commission/rp2350_commission.py led off
+```
 
 Host entry point:
 
@@ -137,8 +145,9 @@ build/rp2350a/rip_rp2350a.uf2
 
 ## Physical tests
 
-1. observe pendulum ADC raw range and calibration;
-2. read Encoder2 A/B, count, arm position and velocity while the motor turns;
-3. establish motor/encoder sign conventions;
-4. characterize dead zone, speed and position response;
-5. record step/chirp/PRBS data for SysID and later controller tuning.
+1. validate the onboard user LED command on the bare RP2350 UNO board;
+2. observe pendulum ADC raw range and calibration;
+3. read Encoder2 A/B, count, arm position and velocity while the motor turns;
+4. establish motor/encoder sign conventions;
+5. characterize dead zone, speed and position response;
+6. record step/chirp/PRBS data for SysID and later controller tuning.
