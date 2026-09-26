@@ -92,6 +92,7 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 SET_USER_LED
 ENTER_USB_BOOTLOADER
+SET_NEOPIXEL
 ```
 
 HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder2 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
@@ -103,6 +104,16 @@ HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, En
 ```bash
 python tools/rp2350_commission/rp2350_commission.py led on
 python tools/rp2350_commission/rp2350_commission.py led off
+```
+
+`SET_NEOPIXEL` is a second bare-board diagnostic path for the onboard GPIO14 WS2812. Firmware uses one 800 kHz PIO state machine and exposes only dim `off`, `red`, `green`, `blue`, and `white` test colors:
+
+```bash
+python tools/rp2350_commission/rp2350_commission.py neopixel red
+python tools/rp2350_commission/rp2350_commission.py neopixel green
+python tools/rp2350_commission/rp2350_commission.py neopixel blue
+python tools/rp2350_commission/rp2350_commission.py neopixel white
+python tools/rp2350_commission/rp2350_commission.py neopixel off
 ```
 
 `ENTER_USB_BOOTLOADER` first drives the motor path to safe-off, acknowledges the HID command, then reboots the RP2350 into its ROM USB bootloader with the mass-storage interface disabled and PICOBOOT left enabled. This is the normal development firmware-update path once the feature has been bootstrapped onto the board.
@@ -156,9 +167,10 @@ The normal updater programs `rip_rp2350a.elf`; UF2 is retained for recovery.
 
 ## Physical tests
 
-1. validate the onboard user LED command on the bare RP2350 UNO board;
-2. observe pendulum ADC raw range and calibration;
-3. read Encoder2 A/B, count, arm position and velocity while the motor turns;
-4. establish motor/encoder sign conventions;
-5. characterize dead zone, speed and position response;
-6. record step/chirp/PRBS data for SysID and later controller tuning.
+1. validate the onboard D13 user LED command on the bare RP2350 UNO board;
+2. validate the onboard GPIO14 WS2812 red/green/blue/white/off command path;
+3. observe pendulum ADC raw range and calibration;
+4. read Encoder2 A/B, count, arm position and velocity while the motor turns;
+5. establish motor/encoder sign conventions;
+6. characterize dead zone, speed and position response;
+7. record step/chirp/PRBS data for SysID and later controller tuning.
