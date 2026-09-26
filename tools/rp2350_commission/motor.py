@@ -73,7 +73,7 @@ def motor_command(
 def motor_direction(
     device: Rp2350Device,
     *,
-    command: float = 0.10,
+    command: float = 0.30,
     hold_s: float = 1.0,
 ) -> dict[str, object]:
     device.start_telemetry()
@@ -111,17 +111,21 @@ def speed_sweep(
     hold_s: float = 1.5,
 ) -> dict[str, object]:
     commands = commands or [
-        0.05,
         0.10,
         0.15,
+        0.18,
         0.20,
+        0.22,
+        0.25,
         0.30,
         0.40,
         0.50,
-        -0.05,
         -0.10,
         -0.15,
+        -0.18,
         -0.20,
+        -0.22,
+        -0.25,
         -0.30,
         -0.40,
         -0.50,
@@ -238,7 +242,12 @@ def breakaway(
     hold_s: float = 0.50,
     min_counts: int = 4,
 ) -> dict[str, object]:
-    """Ramp command in each direction and report the first level that moves the arm."""
+    """Ramp command and report first detectable motion in each direction.
+
+    This is intentionally a detection threshold, not a claim of a repeatable
+    static-friction constant. Commissioning showed strong start hysteresis and
+    rotor/gear-position dependence below the continuous-running region.
+    """
     if step <= 0.0 or max_command <= 0.0 or hold_s <= 0.0:
         raise ValueError("step, max_command, and hold_s must be > 0")
     if min_counts <= 0:
@@ -306,7 +315,7 @@ def breakaway(
 def coast_down(
     device: Rp2350Device,
     *,
-    command: float = 0.20,
+    command: float = 0.40,
     runup_s: float = 2.0,
     coast_s: float = 5.0,
 ) -> dict[str, object]:
