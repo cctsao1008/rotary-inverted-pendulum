@@ -54,14 +54,9 @@ inline constexpr float kActuatorTorquePerEffectiveCommandNm = 0.05f;
 // 2026-09-26 unloaded motor characterization gave running-region command
 // intercepts of about +0.065 and -0.074. Use the symmetric midpoint as the
 // kinetic-friction inverse-map deadzone rather than the previous zero value.
+// Static-start behavior was much more history-dependent and is intentionally
+// left out of the automatic mapping until mechanism-level commissioning.
 inline constexpr float kActuatorCommandDeadzone = 0.07f;
-// Starting from rest is strongly hysteretic and position-dependent. The most
-// conservative observed positive breakaway was +0.23, so automatic control
-// must not claim sub-breakaway authority while the arm is effectively stopped.
-// This is a fail-closed floor, not a claim that 0.23 is a universal plant
-// constant; mechanism-level commissioning can refine it later.
-inline constexpr float kActuatorStaticStartCommand = 0.23f;
-inline constexpr float kActuatorMovingRateThresholdRadS = 0.50f;
 
 inline constexpr float kCommissioningMaxAbsCommand = 1.0f;
 inline constexpr std::uint32_t kCommissioningDefaultLeaseMs = 250;
