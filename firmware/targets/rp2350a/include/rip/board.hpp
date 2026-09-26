@@ -38,4 +38,8 @@ static_assert(kNeopixelGpio != kArmMotorPwmGpio);
 // sensing, or control initialization proceeds.
 void init_safe_idle();
 
+// Bare-board diagnostic output. Motor-A PWMA is held low independently, so
+// toggling D13 only changes the onboard blue user LED.
+void set_user_led(bool on);
+
 }  // namespace rip::board
