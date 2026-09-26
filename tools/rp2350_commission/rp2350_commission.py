@@ -63,7 +63,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--duration", type=float, default=1.0)
 
     p = sub.add_parser("motor-direction")
-    p.add_argument("--command", dest="motor_command", type=float, default=0.10)
+    p.add_argument("--command", dest="motor_command", type=float, default=0.30)
     p.add_argument("--hold", type=float, default=1.0)
 
     p = sub.add_parser("breakaway")
@@ -77,7 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--commands", type=float, nargs="*")
 
     p = sub.add_parser("coast-down")
-    p.add_argument("--command", type=float, default=0.20)
+    p.add_argument("--command", type=float, default=0.40)
     p.add_argument("--runup", type=float, default=2.0)
     p.add_argument("--coast", type=float, default=5.0)
 
@@ -89,17 +89,17 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--settle", type=float, default=2.0)
 
     p = sub.add_parser("step-response")
-    p.add_argument("--amplitude", type=float, default=0.10)
+    p.add_argument("--amplitude", type=float, default=0.30)
     p.add_argument("--hold", type=float, default=1.5)
 
     p = sub.add_parser("chirp")
-    p.add_argument("--amplitude", type=float, default=0.10)
+    p.add_argument("--amplitude", type=float, default=0.30)
     p.add_argument("--f0", type=float, default=0.2)
     p.add_argument("--f1", type=float, default=8.0)
     p.add_argument("--duration", type=float, default=20.0)
 
     p = sub.add_parser("prbs")
-    p.add_argument("--amplitude", type=float, default=0.10)
+    p.add_argument("--amplitude", type=float, default=0.30)
     p.add_argument("--interval", type=float, default=0.20)
     p.add_argument("--duration", type=float, default=20.0)
     p.add_argument("--seed", type=int, default=1)
@@ -107,7 +107,7 @@ def _parser() -> argparse.ArgumentParser:
     p = sub.add_parser("all")
     p.add_argument("--sensor-duration", type=float, default=5.0)
     p.add_argument("--free-swing-duration", type=float, default=10.0)
-    p.add_argument("--encoder-command", type=float, default=0.10)
+    p.add_argument("--encoder-command", type=float, default=0.30)
     p.add_argument("--position-delta", type=float, default=0.25)
     p.add_argument("--chirp-duration", type=float, default=20.0)
     p.add_argument("--prbs-duration", type=float, default=20.0)
@@ -238,9 +238,9 @@ def main(argv: list[str] | None = None) -> int:
                 ),
             }
             results["breakaway"] = motor.breakaway(device)
-            results["motor_direction"] = motor.motor_direction(device)
+            results["motor_direction"] = motor.motor_direction(device, command=0.30)
             results["speed_sweep"] = motor.speed_sweep(device)
-            results["coast_down"] = motor.coast_down(device)
+            results["coast_down"] = motor.coast_down(device, command=0.40)
             results["position_step"] = motor.position_step(
                 device,
                 delta_rad=args.position_delta,
