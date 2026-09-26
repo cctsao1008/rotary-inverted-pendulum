@@ -78,8 +78,10 @@ Characterization commands are host-side experiments; firmware only supplies prim
 - `breakaway`: ramp normalized command in both directions and report the first level that produces encoder motion.
 - `speed-sweep`: map normalized command to steady arm speed.
 - `coast-down`: drive to speed, command zero/coast, and record the decay trace.
-- `free-swing`: keep the motor off, record pendulum motion, and estimate the passive period/frequency from raw ADC crossings.
+- `free-swing`: keep the motor off and record passive pendulum ADC motion. A period/frequency is only reported when the trace passes diagnostic validity gates: sufficient ADC excursion, excursion larger than sample-to-sample noise, Schmitt-style hysteretic crossings, enough telemetry samples per candidate period, at least two resolved periods, and consistent period spacing. Floating/noise-only input therefore returns `estimate_valid=false` and leaves the period/frequency null instead of manufacturing a frequency.
 - `step-response`, `chirp`, and `prbs`: record bounded excitation evidence for SysID.
+
+The free-swing validity gates are intentionally measurement-quality checks, not pendulum calibration or a plant-model assumption. Raw samples and the diagnostic fields (`estimate_reason`, ADC excursion, median step, hysteresis, crossing counts, and period consistency) are still recorded when no period is accepted.
 
 `all` runs the characterization sequence directly, without interactive confirmation prompts. It uses a small `+0.10` motor command during encoder capture by default. Override it with `all --encoder-command <value>`; adjust passive pendulum capture with `--free-swing-duration` and ADC/encoder windows with `--sensor-duration`.
 
