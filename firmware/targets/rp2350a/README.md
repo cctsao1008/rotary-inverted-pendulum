@@ -35,16 +35,22 @@ The production control path remains available for parity with `main`. For physic
 
 ## Canonical mapping
 
-| Semantic signal | UNO shield | RP2350A GPIO |
-| --- | --- | ---: |
-| `ARM_MOTOR_PWM` | D10 / PWMA | 10 |
-| `ARM_MOTOR_IN1` | D13 / AIN1 | 13 |
-| `ARM_MOTOR_IN2` | D12 / AIN2 | 12 |
-| `ARM_ENCODER_A` | D9 / ENCODER1_A | 9 |
-| `ARM_ENCODER_B` | D2 / ENCODER1_B | 2 |
-| `PENDULUM_ANGLE_ADC` | A0 / ADC0 | 26 |
+The RP2350 target uses the UNO Balance J7/J8 interface with motor channel B and Encoder2. This keeps D13 available as the UNO RP2350 onboard user LED.
 
-Motor channel A is used (`MA+`, `MA-`, `ENCODER1_A`, `ENCODER1_B`). The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ quadrature decoding.
+| Semantic signal | UNO shield / board | RP2350A GPIO |
+| --- | --- | ---: |
+| `ARM_MOTOR_PWM` | D3 / PWMB | 3 |
+| `ARM_MOTOR_IN1` | D7 / BIN1 | 7 |
+| `ARM_MOTOR_IN2` | D8 / BIN2 | 8 |
+| `ARM_ENCODER_A` | D10 / ENCODER2_A | 10 |
+| `ARM_ENCODER_B` | D4 / ENCODER2_B | 4 |
+| `PENDULUM_ANGLE_ADC` | A0 / ADC0 | 26 |
+| `USER_LED` | D13 / blue onboard LED | 13 |
+| `NEOPIXEL` | onboard WS2812 data | 14 |
+
+Motor channel B is used (`MB+`, `MB-`, `ENCODER2_A`, `ENCODER2_B`). The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ quadrature decoding.
+
+Motor channel A is deliberately unused. Its PWMA input is D6; firmware holds D6 low from board initialization onward. D13 is physically shared with AIN1 on the shield, but with PWMA held low the onboard blue user LED can be driven without producing channel-A motor output. D12/AIN2 is also initialized low.
 
 ## Runtime and timing
 
@@ -86,7 +92,7 @@ SET_MOTOR_COMMAND
 SAFE_OFF
 ```
 
-HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder1 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
+HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder2 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
 
 `SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. Default test amplitudes are much smaller. The stale-command timeout is the only extra guard in this test path; there is no commissioning mode handshake or firmware slew limiter.
 
@@ -132,7 +138,7 @@ build/rp2350a/rip_rp2350a.uf2
 ## Physical tests
 
 1. observe pendulum ADC raw range and calibration;
-2. read Encoder1 A/B, count, arm position and velocity while the motor turns;
+2. read Encoder2 A/B, count, arm position and velocity while the motor turns;
 3. establish motor/encoder sign conventions;
 4. characterize dead zone, speed and position response;
 5. record step/chirp/PRBS data for SysID and later controller tuning.
