@@ -1,0 +1,106 @@
+name: RP2350 Pico SDK
+
+on:
+  push:
+    branches: [main, rp2350-pico-sdk]
+    paths:
+      - "firmware/targets/rp2350a/**"
+      - "tools/rp2350_commission/**"
+      - "tools/rp2350_motor_suite.py"
+      - "tools/rp2350_mechanism_suite.py"
+      - ".github/workflows/rp2350-pico-sdk.yml"
+  pull_request:
+    paths:
+      - "firmware/targets/rp2350a/**"
+      - "tools/rp2350_commission/**"
+      - "tools/rp2350_motor_suite.py"
+      - "tools/rp2350_mechanism_suite.py"
+      - ".github/workflows/rp2350-pico-sdk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rp2350-pico-sdk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install commissioning Python dependencies
+        run: python3 -m pip install -r tools/rp2350_commission/requirements.txt
+
+      - name: Validate commissioning Python modules
+        run: |
+          python3 -m compileall -q tools/rp2350_commission
+          python3 -m py_compile tools/rp2350_motor_suite.py tools/rp2350_mechanism_suite.py
+          PYTHONPATH=tools/rp2350_commission python3 -c "import protocol; assert protocol.HID_REPORT_SIZE == 64"
+          python3 tools/rp2350_commission/rp2350_commission.py --help >/dev/null
+          python3 tools/rp2350_motor_suite.py --help >/dev/null
+          python3 tools/rp2350_mechanism_suite.py --help >/dev/null
+
+      - name: Run commissioning protocol unit tests
+        run: |
+          PYTHONPATH=tools/rp2350_commission \
+            python3 -m unittest discover -s tools/rp2350_commission -p 'test_*.py' -v
+
+      - name: Run native runtime semantic checks
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+            -Ifirmware/targets/rp2350a/include \
+            firmware/targets/rp2350a/src/runtime.cpp \
+            firmware/targets/rp2350a/tests/runtime_core_test.cpp \
+            -o /tmp/rp2350a-runtime-core-test
+          /tmp/rp2350a-runtime-core-test
+
+      - name: Install Arm embedded toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib
+
+      - name: Checkout Raspberry Pi Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: 2.3.1
+          path: _deps/pico-sdk
+          submodules: recursive
+
+      - name: Configure RP2350A firmware
+        env:
+          PICO_SDK_PATH: ${{ github.workspace }}/_deps/pico-sdk
+        run: |
+          cmake \
+            -S firmware/targets/rp2350a \
+            -B build/rp2350a \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build RP2350A firmware
+        run: cmake --build build/rp2350a --parallel 2
+
+      - name: Verify firmware outputs
+        run: |
+          test -f build/rp2350a/rip_rp2350a.elf
+          test -f build/rp2350a/rip_rp2350a.bin
+          test -f build/rp2350a/rip_rp2350a.uf2
+
+      - name: Upload feature-parity firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: rp2350a-feature-parity
+          path: |
+            build/rp2350a/rip_rp2350a.elf
+            build/rp2350a/rip_rp2350a.bin
+            build/rp2350a/rip_rp2350a.uf2
+          if-no-files-found: error
+          retention-days: 14

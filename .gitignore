@@ -2,6 +2,12 @@
 /target/
 **/*.rs.bk
 
+# CMake / Pico SDK
+/build/
+cmake-build-*/
+compile_commands.json
+*.uf2
+
 # Firmware artifacts
 *.elf
 *.hex
