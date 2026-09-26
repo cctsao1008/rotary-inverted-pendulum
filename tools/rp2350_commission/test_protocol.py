@@ -9,6 +9,7 @@ from protocol import (
     CommandAck,
     HidCommand,
     HidStatus,
+    NeopixelColor,
     TelemetrySample,
     decode_ack,
     decode_device_report,
@@ -71,6 +72,27 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(flags, 0)
         self.assertEqual(sequence, 10)
         self.assertAlmostEqual(value0, 0.0)
+        self.assertAlmostEqual(value1, 0.0)
+        self.assertEqual(duration_ms, 0)
+        self.assertEqual(reserved0, 0)
+        self.assertEqual(reserved, b"\x00" * 40)
+
+    def test_encode_neopixel_command_layout(self) -> None:
+        report = encode_command(
+            HidCommand.SET_NEOPIXEL,
+            11,
+            value0=float(int(NeopixelColor.BLUE)),
+        )
+        version, message_type, command, flags, sequence, value0, value1, duration_ms, reserved0, reserved = struct.unpack(
+            "<BBBBIffII40s", report
+        )
+        self.assertEqual(version, HID_SCHEMA)
+        self.assertEqual(message_type, 0x01)
+        self.assertEqual(command, 0x22)
+        self.assertEqual(command, int(HidCommand.SET_NEOPIXEL))
+        self.assertEqual(flags, 0)
+        self.assertEqual(sequence, 11)
+        self.assertAlmostEqual(value0, float(int(NeopixelColor.BLUE)))
         self.assertAlmostEqual(value1, 0.0)
         self.assertEqual(duration_ms, 0)
         self.assertEqual(reserved0, 0)
