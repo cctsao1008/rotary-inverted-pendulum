@@ -26,8 +26,6 @@ ArmActuatorModel
         ↓
 BoundedActuatorCommand
         ↓
-stationary stiction gate
-        ↓
 TB6612 electrical mapping
         ↓
 RP2350 PWM + direction backend
@@ -62,7 +60,7 @@ Motor channel A is deliberately unused. Its PWMA input is D6; firmware holds D6 
 - RP2350 hardware watchdog timeout is 100 ms;
 - timing evidence is exposed to telemetry.
 
-The mechanical geometry, 1040 count/rev arm scale, pendulum calibration, controller gains, and torque span remain the pre-commissioning baseline until mechanism-level validation. Two target-specific runtime parameters now use 2026-09-26 motor/encoder commissioning evidence: velocity filtering and command-side friction handling.
+The mechanical geometry, 1040 count/rev arm scale, pendulum calibration, controller gains, and torque span remain the pre-commissioning baseline until mechanism-level validation. Two target-specific runtime parameters now use 2026-09-26 motor/encoder commissioning evidence: velocity filtering and the running-region command deadzone.
 
 ### Commissioned velocity filtering
 
@@ -74,9 +72,11 @@ This is a software correction to the rate estimator, not a claim that the pendul
 
 The unloaded speed sweep showed an approximately linear continuous-running region for `|command| >= 0.18`, with command-axis intercepts near `+0.065` and `-0.074`. The RP2350 target therefore uses a symmetric `0.07` kinetic command deadzone in the inverse actuator model.
 
-Starting from rest was substantially more hysteretic and position-dependent than the running region. The most conservative observed positive breakaway was `+0.23`. Automatic closed-loop output therefore passes through a fail-closed stationary stiction gate: while `|phi_dot| <= 0.50 rad/s`, non-zero automatic commands below `0.23` are suppressed to zero. The gate never increases a command, so it cannot exceed upstream command or slew safety bounds. Direct commissioning commands deliberately bypass this gate so characterization remains transparent.
+Starting from rest was substantially more hysteretic and position-dependent than the running region. The most conservative observed positive breakaway was about `+0.23`, but other starts occurred at much smaller commands after recent motion or at different rotor/gear positions. That value is therefore retained as characterization evidence only; it is **not** hard-coded as a stationary automatic-control threshold yet.
 
-These friction values are provisional actuator-side evidence. They do not replace the still-unvalidated torque/current model, and they should be revisited after the full arm/pendulum mechanism is installed.
+This distinction is deliberate. A post-safety start gate could distort the existing slew-limit semantics, while a true stiction compensator would need state/history-aware behavior and should be tuned with the full mechanism installed. For now the runtime applies only the evidence-backed running-region deadzone and leaves static-start compensation for the mechanism-level commissioning pass.
+
+These friction values are provisional actuator-side evidence. They do not replace the still-unvalidated torque/current model.
 
 ## USB and testing
 
@@ -141,7 +141,7 @@ python tools/rp2350_commission/rp2350_commission.py <command>
 python tools/rp2350_motor_suite.py
 ```
 
-`rp2350_motor_suite.py` runs direction, breakaway detection, dense speed sweep, positive/negative coast-down, step, chirp, and PRBS characterization in one invocation and preserves each section's raw evidence under `artifacts/commissioning/`.
+`rp2350_motor_suite.py` runs direction, breakaway detection, dense speed sweep, positive/negative coast-down, step, chirp, and PRBS characterization in one invocation. It preserves each section's raw evidence under `artifacts/commissioning/` and automatically derives count-slope speed fits, kinetic command intercepts, coast stop time/travel, step-response timing, and runtime timing statistics into the suite summary.
 
 ## Build and firmware update
 
@@ -204,5 +204,6 @@ Still requiring mechanism-level evidence:
 2. installed pendulum ADC range, offset, sign, and noise;
 3. passive pendulum dynamics / natural frequency;
 4. coupled arm-pendulum system identification;
-5. capture/balance controller tuning and closed-loop validation;
-6. swing-up and transition validation.
+5. static-start/stiction compensation with the installed mechanism;
+6. capture/balance controller tuning and closed-loop validation;
+7. swing-up and transition validation.
