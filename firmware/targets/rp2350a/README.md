@@ -26,6 +26,8 @@ ArmActuatorModel
         ↓
 BoundedActuatorCommand
         ↓
+stationary stiction gate
+        ↓
 TB6612 electrical mapping
         ↓
 RP2350 PWM + direction backend
@@ -60,7 +62,21 @@ Motor channel A is deliberately unused. Its PWMA input is D6; firmware holds D6 
 - RP2350 hardware watchdog timeout is 100 ms;
 - timing evidence is exposed to telemetry.
 
-Current calibration/controller constants intentionally preserve the STM32 live-shadow baseline until specimen commissioning, including the 1040 count/rev encoder scale and existing swing-up/capture/balance constants.
+The mechanical geometry, 1040 count/rev arm scale, pendulum calibration, controller gains, and torque span remain the pre-commissioning baseline until mechanism-level validation. Two target-specific runtime parameters now use 2026-09-26 motor/encoder commissioning evidence: velocity filtering and command-side friction handling.
+
+### Commissioned velocity filtering
+
+The estimator still uses the production one-sample dirty-derivative structure, but no longer exposes raw 1 kHz quantization directly. At the current scales, one arm-encoder count per control tick is about `6.04 rad/s`, and one pendulum ADC count per tick is about `1.53 rad/s`. `kEstimatorRateFilterAlpha=0.10` gives the rate filter a roughly 9.5 ms time constant / 16.8 Hz pole while retaining substantially more bandwidth than the measured motor actuator.
+
+This is a software correction to the rate estimator, not a claim that the pendulum sensor itself is fully commissioned. Pendulum ADC offset, direction, real installed noise, and dynamic response still require mechanism-level evidence.
+
+### Commissioned friction handling
+
+The unloaded speed sweep showed an approximately linear continuous-running region for `|command| >= 0.18`, with command-axis intercepts near `+0.065` and `-0.074`. The RP2350 target therefore uses a symmetric `0.07` kinetic command deadzone in the inverse actuator model.
+
+Starting from rest was substantially more hysteretic and position-dependent than the running region. The most conservative observed positive breakaway was `+0.23`. Automatic closed-loop output therefore passes through a fail-closed stationary stiction gate: while `|phi_dot| <= 0.50 rad/s`, non-zero automatic commands below `0.23` are suppressed to zero. The gate never increases a command, so it cannot exceed upstream command or slew safety bounds. Direct commissioning commands deliberately bypass this gate so characterization remains transparent.
+
+These friction values are provisional actuator-side evidence. They do not replace the still-unvalidated torque/current model, and they should be revisited after the full arm/pendulum mechanism is installed.
 
 ## USB and testing
 
@@ -97,7 +113,7 @@ SET_NEOPIXEL
 
 HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, Encoder2 A/B, accumulated count, estimated state, applied motor command, and timing evidence.
 
-`SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. Default test amplitudes are much smaller. The stale-command timeout is the only extra guard in this test path; there is no commissioning mode handshake or firmware slew limiter.
+`SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. Default characterization amplitudes now use the measured running region rather than the earlier `0.10` placeholder. The stale-command timeout is the only extra guard in this direct test path; there is no commissioning mode handshake or firmware slew limiter.
 
 `SET_USER_LED` is a bare-board diagnostic command for the D13/GPIO13 blue onboard user LED. The host CLI exposes it directly:
 
@@ -118,11 +134,14 @@ python tools/rp2350_commission/rp2350_commission.py neopixel off
 
 `ENTER_USB_BOOTLOADER` first drives the motor path to safe-off, acknowledges the HID command, then reboots the RP2350 into its ROM USB bootloader with the mass-storage interface disabled and PICOBOOT left enabled. This is the normal development firmware-update path once the feature has been bootstrapped onto the board.
 
-Host entry point:
+Host entry points:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py <command>
+python tools/rp2350_motor_suite.py
 ```
+
+`rp2350_motor_suite.py` runs direction, breakaway detection, dense speed sweep, positive/negative coast-down, step, chirp, and PRBS characterization in one invocation and preserves each section's raw evidence under `artifacts/commissioning/`.
 
 ## Build and firmware update
 
@@ -165,12 +184,25 @@ build/rp2350a/rip_rp2350a.uf2
 
 The normal updater programs `rip_rp2350a.elf`; UF2 is retained for recovery.
 
-## Physical tests
+## Commissioning status
 
-1. validate the onboard D13 user LED command on the bare RP2350 UNO board;
-2. validate the onboard GPIO14 WS2812 red/green/blue/white/off command path;
-3. observe pendulum ADC raw range and calibration;
-4. read Encoder2 A/B, count, arm position and velocity while the motor turns;
-5. establish motor/encoder sign conventions;
-6. characterize dead zone, speed and position response;
-7. record step/chirp/PRBS data for SysID and later controller tuning.
+Completed RP2350 bare-board / motor-side evidence:
+
+1. D13 user LED command path;
+2. GPIO14 WS2812 red/green/blue/white/off path;
+3. HID-to-PICOBOOT firmware update with flash verify and reboot;
+4. floating-ADC false-frequency rejection;
+5. Motor-B positive/negative actuation and Encoder2 quadrature/sign path;
+6. breakaway detection and dense command-speed map;
+7. positive/negative coast-down;
+8. `±0.30` step response, 0.2–8 Hz chirp, and 200 ms PRBS;
+9. 1 kHz runtime timing under active motor/encoder/USB load.
+
+Still requiring mechanism-level evidence:
+
+1. absolute 1040 count/rev confirmation against a known physical revolution;
+2. installed pendulum ADC range, offset, sign, and noise;
+3. passive pendulum dynamics / natural frequency;
+4. coupled arm-pendulum system identification;
+5. capture/balance controller tuning and closed-loop validation;
+6. swing-up and transition validation.
