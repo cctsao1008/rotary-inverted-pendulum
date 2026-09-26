@@ -7,7 +7,7 @@ import time
 
 from cdc_transport import CdcTransport
 from hid_transport import HidTransport
-from protocol import CommandAck, HidCommand, HidStatus, TelemetrySample, encode_command
+from protocol import CommandAck, HidCommand, HidStatus, NeopixelColor, TelemetrySample, encode_command
 
 
 class Rp2350Device:
@@ -162,6 +162,10 @@ class Rp2350Device:
     def set_user_led(self, on: bool) -> bool:
         ack = self.command(HidCommand.SET_USER_LED, value0=1.0 if on else 0.0)
         return bool(round(ack.value0))
+
+    def set_neopixel(self, color: NeopixelColor) -> NeopixelColor:
+        ack = self.command(HidCommand.SET_NEOPIXEL, value0=float(int(color)))
+        return NeopixelColor(round(ack.value0))
 
     def enter_usb_bootloader(self) -> None:
         self.command(HidCommand.ENTER_USB_BOOTLOADER, timeout_s=2.0)
