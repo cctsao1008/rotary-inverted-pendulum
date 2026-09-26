@@ -35,11 +35,11 @@ The production control path remains available for parity with `main`. For physic
 
 ## Canonical mapping
 
-The RP2350 target uses the UNO Balance J7/J8 interface with motor channel B and Encoder2. This keeps D13 available as the UNO RP2350 onboard user LED.
+The RP2350 target uses TB6612 motor channel B with Encoder2. The motor mapping must be read from the TB6612 U3 net labels, not inferred from the separate J8 PWM breakout: J8 exposes D6 and D3 as generic PWM-capable Arduino pins, but U3 PWMA/PWMB are D10/D9 respectively.
 
 | Semantic signal | UNO shield / board | RP2350A GPIO |
 | --- | --- | ---: |
-| `ARM_MOTOR_PWM` | D3 / PWMB | 3 |
+| `ARM_MOTOR_PWM` | D9 / PWMB | 9 |
 | `ARM_MOTOR_IN1` | D7 / BIN1 | 7 |
 | `ARM_MOTOR_IN2` | D8 / BIN2 | 8 |
 | `ARM_ENCODER_A` | D10 / ENCODER2_A | 10 |
@@ -50,7 +50,7 @@ The RP2350 target uses the UNO Balance J7/J8 interface with motor channel B and 
 
 Motor channel B is used (`MB+`, `MB-`, `ENCODER2_A`, `ENCODER2_B`). The encoder pins are non-consecutive, so this target uses both-edge GPIO IRQ quadrature decoding.
 
-Motor channel A is deliberately unused. Its PWMA input is D6; firmware holds D6 low from board initialization onward. D13 is physically shared with AIN1 on the shield, but with PWMA held low the onboard blue user LED can be driven without producing channel-A motor output. D12/AIN2 is also initialized low.
+Motor channel A is deliberately unused. The shield shares D10 between PWMA and ENCODER2_A, so PWMA cannot be forced low while Encoder2 is in use. Instead firmware keeps the channel-A direction inputs equal: D13/AIN1 and D12/AIN2 are both low in the normal safe state. `SET_USER_LED` mirrors D12 with D13, so channel A remains non-driving while the blue onboard LED is toggled.
 
 ## Runtime and timing
 
@@ -99,7 +99,7 @@ HID telemetry is 100 Hz while the runtime remains 1 kHz. It includes raw ADC, En
 
 `SET_MOTOR_COMMAND` accepts a direct normalized command in `[-1.0, +1.0]`. Default test amplitudes are much smaller. The stale-command timeout is the only extra guard in this test path; there is no commissioning mode handshake or firmware slew limiter.
 
-`SET_USER_LED` is a bare-board diagnostic command for the D13/GPIO13 blue onboard user LED. The host CLI exposes it directly:
+`SET_USER_LED` is a bare-board diagnostic command for the D13/GPIO13 blue onboard user LED. Because D13 is also channel-A AIN1, firmware mirrors D12/AIN2 to the same level so the unused channel-A bridge cannot command a direction while the LED changes:
 
 ```bash
 python tools/rp2350_commission/rp2350_commission.py led on
@@ -170,7 +170,7 @@ The normal updater programs `rip_rp2350a.elf`; UF2 is retained for recovery.
 1. validate the onboard D13 user LED command on the bare RP2350 UNO board;
 2. validate the onboard GPIO14 WS2812 red/green/blue/white/off command path;
 3. observe pendulum ADC raw range and calibration;
-4. read Encoder2 A/B, count, arm position and velocity while the motor turns;
+4. read Encoder2 A/B, count, arm position and velocity while motor channel B turns;
 5. establish motor/encoder sign conventions;
 6. characterize dead zone, speed and position response;
 7. record step/chirp/PRBS data for SysID and later controller tuning.
