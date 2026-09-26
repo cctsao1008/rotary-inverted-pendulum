@@ -34,6 +34,14 @@ static_assert(kUserLedGpio != kArmMotorIn1Gpio);
 static_assert(kUserLedGpio != kArmMotorIn2Gpio);
 static_assert(kNeopixelGpio != kArmMotorPwmGpio);
 
+enum class NeopixelColor : std::uint8_t {
+    Off = 0,
+    Red = 1,
+    Green = 2,
+    Blue = 3,
+    White = 4,
+};
+
 // Establish a deterministic non-actuating board state before USB, telemetry,
 // sensing, or control initialization proceeds.
 void init_safe_idle();
@@ -41,5 +49,9 @@ void init_safe_idle();
 // Bare-board diagnostic output. Motor-A PWMA is held low independently, so
 // toggling D13 only changes the onboard blue user LED.
 void set_user_led(bool on);
+
+// Bare-board WS2812 diagnostic output on GPIO14. Colors are deliberately kept
+// dim because this is only intended to validate the onboard RGB signal path.
+void set_neopixel(NeopixelColor color);
 
 }  // namespace rip::board
