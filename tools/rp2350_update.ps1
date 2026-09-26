@@ -38,6 +38,31 @@ function Find-Picotool {
     return $candidate.FullName
 }
 
+function Invoke-NativeProbe {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @()
+    )
+
+    # Windows PowerShell promotes redirected native stderr to ErrorRecord objects.
+    # During USB re-enumeration a missing device is expected, so polling must not
+    # abort merely because the probe writes a transient diagnostic to stderr.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& $FilePath @ArgumentList 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output   = $output
+    }
+}
+
 $python = Require-Command "python"
 $picotool = Find-Picotool
 
@@ -70,8 +95,8 @@ Write-Host "[3/6] Wait for RP2350 ROM PICOBOOT"
 $bootDeadline = [DateTime]::UtcNow.AddSeconds($BootTimeoutSeconds)
 $bootReady = $false
 while ([DateTime]::UtcNow -lt $bootDeadline) {
-    $null = & $picotool info 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $probe = Invoke-NativeProbe -FilePath $picotool -ArgumentList @("info")
+    if ($probe.ExitCode -eq 0) {
         $bootReady = $true
         break
     }
@@ -92,8 +117,9 @@ $appDeadline = [DateTime]::UtcNow.AddSeconds($AppTimeoutSeconds)
 $appReady = $false
 $statusOutput = @()
 while ([DateTime]::UtcNow -lt $appDeadline) {
-    $statusOutput = @(& $python $commissionCli status 2>&1)
-    if ($LASTEXITCODE -eq 0) {
+    $probe = Invoke-NativeProbe -FilePath $python -ArgumentList @($commissionCli, "status")
+    if ($probe.ExitCode -eq 0) {
+        $statusOutput = @($probe.Output)
         $appReady = $true
         break
     }
