@@ -36,6 +36,7 @@ target_include_directories(rip_rp2350a PRIVATE
 
 target_link_libraries(rip_rp2350a PRIVATE
     pico_stdlib
+    pico_bootrom
     hardware_adc
     hardware_clocks
     hardware_gpio
