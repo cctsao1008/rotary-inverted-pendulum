@@ -12,6 +12,28 @@ For motor/encoder characterization, prefer the one-shot suite instead of running
 python tools/rp2350_motor_suite.py
 ```
 
+For the installed pendulum mechanism, use the integrated suite:
+
+```bash
+python tools/rp2350_mechanism_suite.py
+```
+
+The mechanism suite owns the remaining operator-guided pose/release actions and then runs bounded step/chirp/PRBS excitation automatically. It does not request closed-loop balance or swing-up.
+
+## Pendulum sensor electrical boundary
+
+The UNO Balance shield exposes `VCC50` next to A0/A1, but the RP2350 A0 path is a direct ADC input on GPIO26. Do **not** power the Forest D1 conductive-plastic angle potentiometer from the shield's 5 V rail when its wiper is connected to RP2350 A0.
+
+For RP2350 commissioning use:
+
+```text
+angle sensor supply = RP2350 3.3 V
+angle sensor ground = common GND
+angle sensor wiper  = A0 / GPIO26 / ADC0
+```
+
+The original Forest D1 angle-sensor interface also excited the passive potentiometer from 3.3 V. The current sensor manual specifies a 5 kΩ conductive-plastic potentiometer with a nominal 345° electrical angle and continuous 360° mechanical rotation, so 3.3 V excitation preserves the same ratiometric angle measurement while keeping the RP2350 ADC input inside its electrical range.
+
 Commands:
 
 ```text
@@ -115,7 +137,20 @@ The free-swing validity gates are intentionally measurement-quality checks, not 
 
 `rp2350_motor_suite.py` runs direction, breakaway, dense speed sweep, positive and negative coast-down, step response, chirp, PRBS, plus pre/post status in one invocation. A failure in one section is recorded and the suite continues after requesting `SAFE_OFF`; individual raw artifacts remain available for offline analysis.
 
-`all` runs the broader commissioning sequence directly, without interactive confirmation prompts. Its encoder capture now defaults to `+0.30`; passive pendulum capture remains separate because the pendulum sensor/mechanism has not yet been commissioned. Override with `all --encoder-command <value>` and adjust windows with `--sensor-duration` / `--free-swing-duration`.
+## Installed-mechanism suite
+
+`rp2350_mechanism_suite.py` is the next physical gate. In one invocation it records:
+
+1. hanging-down pendulum ADC reference and noise;
+2. manually held upright ADC reference and noise;
+3. one slow full mechanical revolution to observe sensor span/dead-zone behavior;
+4. passive free swing for period/frequency and damping evidence;
+5. position-bounded arm step, chirp, and PRBS excitation with the pendulum installed;
+6. pre/post runtime status and automatic offline analysis.
+
+The motor excitation is deliberately bounded around the starting arm position (`±0.15 rad` default reference amplitude, `|command| <= 0.30`, independent `0.45 rad` minimum excursion guard). A calibration failure safe-offs and skips all later motion automatically.
+
+`all` remains the broader low-level commissioning sequence. Its encoder capture defaults to `+0.30`; for an installed mechanism prefer `rp2350_mechanism_suite.py` rather than invoking individual tests.
 
 Active tests call `SAFE_OFF` when they finish, and the firmware timeout stops a stale command if the host disappears.
 
