@@ -4,7 +4,7 @@ from collections import deque
 import unittest
 
 from device import Rp2350Device
-from protocol import CommandAck, HidCommand, HidStatus, TelemetrySample
+from protocol import CommandAck, HidCommand, HidStatus, NeopixelColor, TelemetrySample
 
 
 class FakeHid:
@@ -102,6 +102,14 @@ class DeviceCommandTests(unittest.TestCase):
         )
 
         self.assertTrue(device.set_user_led(True))
+
+    def test_neopixel_returns_acknowledged_color(self) -> None:
+        device = Rp2350Device()
+        device.hid = FakeHid(
+            [self._ack(HidCommand.SET_NEOPIXEL, value0=float(int(NeopixelColor.GREEN)))]
+        )
+
+        self.assertEqual(device.set_neopixel(NeopixelColor.GREEN), NeopixelColor.GREEN)
 
     def test_bootloader_handoff_marks_session_non_closable(self) -> None:
         device = Rp2350Device()
