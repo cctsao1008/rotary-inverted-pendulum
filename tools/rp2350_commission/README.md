@@ -55,9 +55,7 @@ python tools/rp2350_commission/rp2350_commission.py all
 
 HID commands are deliberately small: `GET_STATUS`, `TELEMETRY_ON`, `TELEMETRY_OFF`, `SET_MOTOR_COMMAND`, `SAFE_OFF`, `SET_USER_LED`, `ENTER_USB_BOOTLOADER`, and `SET_NEOPIXEL`.
 
-The active motor uses TB6612 channel B: D9/PWMB, D7/BIN1, D8/BIN2, with Encoder2 on D10/D4. The shield's J8 D6/D3 pins are generic PWM-capable breakouts; they are not the TB6612 PWMA/PWMB nets.
-
-`SET_USER_LED` controls the UNO RP2350 onboard blue user LED on D13/GPIO13. D13 is also unused channel-A AIN1, while D10 is shared between PWMA and Encoder2_A. Firmware mirrors D12/AIN2 with D13/AIN1 during LED diagnostics so channel A remains in an equal-input, non-driving state.
+`SET_USER_LED` directly controls the UNO RP2350 onboard blue user LED on D13/GPIO13. The active motor uses TB6612 channel B, while unused channel-A PWMA/D6 is held low, so toggling D13 cannot actuate motor channel A.
 
 `SET_NEOPIXEL` drives the onboard GPIO14 WS2812 through a dedicated 800 kHz PIO state machine. The diagnostic interface deliberately exposes only `off`, `red`, `green`, `blue`, and `white` at low brightness; its purpose is to verify the complete host HID → firmware command → PIO → WS2812 signal path, not to introduce a general RGB status framework.
 
