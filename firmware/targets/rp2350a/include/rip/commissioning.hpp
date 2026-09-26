@@ -13,6 +13,7 @@ enum class Command : std::uint8_t {
     SetMotorCommand = 0x12,
     SafeOff = 0x13,
     SetUserLed = 0x20,
+    EnterUsbBootloader = 0x21,
 };
 
 enum class Status : std::uint8_t {
