@@ -160,3 +160,6 @@ class Rp2350Device:
     def set_user_led(self, on: bool) -> bool:
         ack = self.command(HidCommand.SET_USER_LED, value0=1.0 if on else 0.0)
         return bool(round(ack.value0))
+
+    def enter_usb_bootloader(self) -> None:
+        self.command(HidCommand.ENTER_USB_BOOTLOADER, timeout_s=2.0)
