@@ -177,19 +177,19 @@ ArmServoCommand ArmServo::position_step() {
     if (!state_.velocity_valid) return out;
 
     const float error = target_ - state_.position_rad;
-    out.position_error_rad = error;
     if (std::fabs(error) <= config_.position_tolerance_rad &&
         std::fabs(state_.velocity_rad_s) <= config_.settle_velocity_rad_s) {
         velocity_integrator_ = 0.0f;
+        out.position_error_rad = error;
         return out;
     }
 
-    float command = config_.position_kp_command_per_rad * error -
-                    config_.position_kd_command_per_rad_s * state_.velocity_rad_s;
-    command = apply_stiction_floor(command, error);
-    const float bounded = std::clamp(command, -max_abs_command_, max_abs_command_);
-    out.normalized_command = bounded;
-    out.saturated = bounded != command;
+    const float velocity_target = std::clamp(
+        config_.position_kp_rad_s_per_rad * error,
+        -config_.position_max_velocity_rad_s,
+        config_.position_max_velocity_rad_s);
+    out = velocity_step(velocity_target);
+    out.position_error_rad = error;
     return out;
 }
 
