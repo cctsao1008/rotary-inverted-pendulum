@@ -118,6 +118,8 @@ class Rp2350Device:
     def status(self) -> dict[str, object]:
         ack = self.command(HidCommand.GET_STATUS)
         detail = ack.detail
+        direct_active = bool(detail & (1 << 16))
+        servo_active = bool(detail & (1 << 17))
         servo_mode_raw = (detail >> 18) & 0x03
         try:
             servo_mode: int | str = ArmServoMode(servo_mode_raw).name.lower()
@@ -126,10 +128,11 @@ class Rp2350Device:
         return {
             "runtime_state": detail & 0xFF,
             "control_mode": (detail >> 8) & 0xFF,
-            "direct_motor_active": bool(detail & (1 << 16)),
-            "arm_servo_active": bool(detail & (1 << 17)),
+            "direct_motor_active": direct_active,
+            "motor_command": ack.value0 if direct_active else 0.0,
+            "arm_servo_active": servo_active,
             "arm_servo_mode": servo_mode,
-            "motor_or_servo_target": ack.value0,
+            "arm_servo_target": ack.value0 if servo_active else 0.0,
             "encoder_illegal_transitions": int(round(ack.value1)),
             "timestamp_us": ack.timestamp_us,
             "cdc": self.cdc.command("status") if self.cdc_available else [],
