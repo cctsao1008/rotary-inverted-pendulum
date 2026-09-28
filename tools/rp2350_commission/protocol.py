@@ -32,12 +32,20 @@ class AuthorityMode(IntEnum):
     FAULT = 3
 
 
+class ArmServoMode(IntEnum):
+    OFF = 0
+    VELOCITY = 1
+    POSITION = 2
+
+
 class HidCommand(IntEnum):
     GET_STATUS = 0x01
     TELEMETRY_ON = 0x02
     TELEMETRY_OFF = 0x03
     SET_MOTOR_COMMAND = 0x12
     SAFE_OFF = 0x13
+    SET_ARM_VELOCITY = 0x14
+    SET_ARM_POSITION = 0x15
     SET_USER_LED = 0x20
     ENTER_USB_BOOTLOADER = 0x21
     SET_NEOPIXEL = 0x22
