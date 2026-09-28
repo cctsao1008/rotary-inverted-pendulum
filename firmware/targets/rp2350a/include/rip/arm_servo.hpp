@@ -27,20 +27,27 @@ struct ArmServoConfig {
     std::uint32_t velocity_window_us{10000};
     float velocity_filter_alpha{0.25f};
 
+    // 2026-09-26 unloaded running-region fits from the hardware specimen.
     float positive_speed_gain_rad_s_per_command{56.19f};
     float positive_speed_intercept_rad_s{-3.68f};
     float negative_speed_gain_rad_s_per_command{54.10f};
     float negative_speed_intercept_rad_s{4.03f};
 
+    // Inner velocity loop. The feedforward owns most of the steady command;
+    // PI closes specimen/load/supply error and supplies start authority.
     float velocity_kp{0.018f};
     float velocity_ki{0.67f};
     float integrator_limit{0.35f};
 
-    float position_kp_command_per_rad{2.0f};
-    float position_kd_command_per_rad_s{0.06f};
+    // Position mode is deliberately cascaded through the same velocity loop
+    // instead of maintaining a second direct-PWM tuning path.
+    float position_kp_rad_s_per_rad{10.0f};
+    float position_max_velocity_rad_s{8.0f};
     float position_tolerance_rad{0.01f};
     float settle_velocity_rad_s{0.8f};
 
+    // Static start was history/rotor-position dependent. This is only a
+    // near-zero-speed minimum authority; the PI loop may request more.
     float stiction_command{0.18f};
     float stiction_velocity_rad_s{1.0f};
 };
