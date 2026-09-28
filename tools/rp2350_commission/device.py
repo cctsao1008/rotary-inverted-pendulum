@@ -7,7 +7,15 @@ import time
 
 from cdc_transport import CdcTransport
 from hid_transport import HidTransport
-from protocol import CommandAck, HidCommand, HidStatus, NeopixelColor, TelemetrySample, encode_command
+from protocol import (
+    ArmServoMode,
+    CommandAck,
+    HidCommand,
+    HidStatus,
+    NeopixelColor,
+    TelemetrySample,
+    encode_command,
+)
 
 
 class Rp2350Device:
@@ -110,11 +118,19 @@ class Rp2350Device:
     def status(self) -> dict[str, object]:
         ack = self.command(HidCommand.GET_STATUS)
         detail = ack.detail
+        servo_mode_raw = (detail >> 18) & 0x03
+        try:
+            servo_mode: int | str = ArmServoMode(servo_mode_raw).name.lower()
+        except ValueError:
+            servo_mode = servo_mode_raw
         return {
             "runtime_state": detail & 0xFF,
             "control_mode": (detail >> 8) & 0xFF,
             "direct_motor_active": bool(detail & (1 << 16)),
-            "motor_command": ack.value0,
+            "arm_servo_active": bool(detail & (1 << 17)),
+            "arm_servo_mode": servo_mode,
+            "motor_or_servo_target": ack.value0,
+            "encoder_illegal_transitions": int(round(ack.value1)),
             "timestamp_us": ack.timestamp_us,
             "cdc": self.cdc.command("status") if self.cdc_available else [],
         }
@@ -158,6 +174,36 @@ class Rp2350Device:
             value0=value,
             duration_ms=lease_ms,
         ).value0
+
+    def set_arm_velocity(
+        self,
+        target_rad_s: float,
+        *,
+        max_command: float = 0.5,
+        lease_ms: int = 2000,
+    ) -> tuple[float, float]:
+        ack = self.command(
+            HidCommand.SET_ARM_VELOCITY,
+            value0=target_rad_s,
+            value1=max_command,
+            duration_ms=lease_ms,
+        )
+        return ack.value0, ack.value1
+
+    def set_arm_position(
+        self,
+        target_rad: float,
+        *,
+        max_command: float = 0.35,
+        lease_ms: int = 2000,
+    ) -> tuple[float, float]:
+        ack = self.command(
+            HidCommand.SET_ARM_POSITION,
+            value0=target_rad,
+            value1=max_command,
+            duration_ms=lease_ms,
+        )
+        return ack.value0, ack.value1
 
     def set_user_led(self, on: bool) -> bool:
         ack = self.command(HidCommand.SET_USER_LED, value0=1.0 if on else 0.0)
