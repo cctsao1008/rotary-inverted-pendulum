@@ -127,8 +127,12 @@ float ArmServo::apply_stiction_floor(float command, float intent) const {
     if (std::fabs(intent) < 1.0e-4f || std::fabs(state_.velocity_rad_s) > config_.stiction_velocity_rad_s) {
         return command;
     }
+    // Stiction compensation may strengthen a command that is trying to start
+    // motion in the requested direction, but must never overwrite a damping or
+    // braking correction that temporarily points against the target/error.
+    if (command * intent <= 0.0f) return command;
     if (std::fabs(command) >= config_.stiction_command) return command;
-    return std::copysign(config_.stiction_command, intent);
+    return std::copysign(config_.stiction_command, command);
 }
 
 ArmServoCommand ArmServo::velocity_step(float target_rad_s) {
