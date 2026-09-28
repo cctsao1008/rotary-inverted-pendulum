@@ -118,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         "- SAFE_OFF is requested on exit"
     )
 
+    all_samples = []
     with Rp2350Device(hid_path=args.hid_path, cdc_port=args.cdc_port) as device:
         device.safe_off()
         device.start_telemetry()
@@ -127,9 +128,8 @@ def main(argv: list[str] | None = None) -> int:
             result["pre_status"] = pre
             initial_illegal = int(pre.get("encoder_illegal_transitions", 0))
 
-            # Flush a short stationary window so the firmware's encoder-only
-            # velocity estimator is fully primed before the first target.
-            _capture(device, recorder, 0.4, phase="prime", control="off", target=0.0)
+            samples = _capture(device, recorder, 0.4, phase="prime", control="off", target=0.0)
+            all_samples.extend(samples)
 
             speed_results = []
             for index, target in enumerate(plan["speed_targets_rad_s"]):
@@ -148,10 +148,12 @@ def main(argv: list[str] | None = None) -> int:
                     control="velocity",
                     target=float(target),
                 )
+                all_samples.extend(samples)
                 speed_results.append(_speed_summary(float(target), samples))
 
             device.safe_off()
             settle = _capture(device, recorder, 0.8, phase="position-settle", control="off", target=0.0)
+            all_samples.extend(settle)
             if not settle:
                 raise RuntimeError("no telemetry before position sequence")
             origin = settle[-1].phi
@@ -176,10 +178,12 @@ def main(argv: list[str] | None = None) -> int:
                     origin=origin,
                     offset=float(offset),
                 )
+                all_samples.extend(samples)
                 position_results.append(_position_summary(target, samples))
 
             device.safe_off()
-            _capture(device, recorder, 0.5, phase="post-safe-off", control="off", target=0.0)
+            samples = _capture(device, recorder, 0.5, phase="post-safe-off", control="off", target=0.0)
+            all_samples.extend(samples)
             post = device.status()
             result["post_status"] = post
             result["speed"] = speed_results
@@ -188,14 +192,15 @@ def main(argv: list[str] | None = None) -> int:
             result["encoder_illegal_transition_delta"] = (
                 int(post.get("encoder_illegal_transitions", 0)) - initial_illegal
             )
-            result["max_execution_time_us"] = max(
-                [
-                    s.execution_time_us
-                    for section in (speed_results, position_results)
-                    for s in []
-                ],
-                default=None,
-            )
+            result["runtime_timing"] = {
+                "samples": len(all_samples),
+                "missed_opportunities_max": max((s.missed_opportunities for s in all_samples), default=0),
+                "deadline_overruns_max": max((s.deadline_overruns for s in all_samples), default=0),
+                "execution_time_us_max": max((s.execution_time_us for s in all_samples), default=0),
+                "execution_time_us_mean": (
+                    statistics.fmean(s.execution_time_us for s in all_samples) if all_samples else None
+                ),
+            }
             result["artifact_dir"] = str(recorder.directory)
             recorder.write_summary(result)
 
