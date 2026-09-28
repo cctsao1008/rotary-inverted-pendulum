@@ -21,6 +21,7 @@ option(RIP_ENABLE_CDC_LOG "Enable unsolicited CDC debug logging" ON)
 
 add_executable(rip_rp2350a
     src/main.cpp
+    src/arm_servo.cpp
     src/board.cpp
     src/runtime.cpp
     src/platform.cpp
