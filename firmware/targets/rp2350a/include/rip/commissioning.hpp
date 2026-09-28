@@ -12,6 +12,8 @@ enum class Command : std::uint8_t {
     TelemetryOff = 0x03,
     SetMotorCommand = 0x12,
     SafeOff = 0x13,
+    SetArmVelocity = 0x14,
+    SetArmPosition = 0x15,
     SetUserLed = 0x20,
     EnterUsbBootloader = 0x21,
     SetNeopixel = 0x22,
