@@ -18,12 +18,19 @@ from recording import RunRecorder  # noqa: E402
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run one-shot encoder-only RP2350 arm velocity/position servo commissioning"
+        description="Run encoder-only RP2350 arm velocity/position servo commissioning"
+    )
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        choices=("velocity", "position", "all"),
+        default="all",
+        help="commission velocity loop, position loop, or both (default: all)",
     )
     parser.add_argument("--cdc-port", help="override auto-detected CDC COM/tty port")
     parser.add_argument("--hid-path", help="override auto-detected hidapi path")
-    parser.add_argument("--speed-max-command", type=float, default=0.50)
-    parser.add_argument("--position-max-command", type=float, default=0.35)
+    parser.add_argument("--speed-max-command", type=float, default=0.35)
+    parser.add_argument("--position-max-command", type=float, default=0.30)
     return parser
 
 
@@ -92,6 +99,75 @@ def _position_summary(target: float, samples: list) -> dict[str, object]:
     }
 
 
+def _run_velocity(
+    device: Rp2350Device,
+    recorder: RunRecorder,
+    plan: dict[str, object],
+    max_command: float,
+    all_samples: list,
+) -> list[dict[str, object]]:
+    results = []
+    for index, target_value in enumerate(plan["speed_targets_rad_s"]):
+        target = float(target_value)
+        print(f"[velocity {target:+.1f} rad/s]", flush=True)
+        lease_ms = int(float(plan["speed_stage_duration_s"]) * 1000.0) + 400
+        device.set_arm_velocity(target, max_command=max_command, lease_ms=lease_ms)
+        samples = _capture(
+            device,
+            recorder,
+            float(plan["speed_stage_duration_s"]),
+            phase=f"velocity-{index:02d}",
+            control="velocity",
+            target=target,
+        )
+        all_samples.extend(samples)
+        results.append(_speed_summary(target, samples))
+    return results
+
+
+def _run_position(
+    device: Rp2350Device,
+    recorder: RunRecorder,
+    plan: dict[str, object],
+    max_command: float,
+    all_samples: list,
+) -> tuple[float, list[dict[str, object]]]:
+    device.safe_off()
+    settle = _capture(
+        device,
+        recorder,
+        0.8,
+        phase="position-settle",
+        control="off",
+        target=0.0,
+    )
+    all_samples.extend(settle)
+    if not settle:
+        raise RuntimeError("no telemetry before position sequence")
+    origin = settle[-1].phi
+
+    results = []
+    for index, offset_value in enumerate(plan["position_offsets_rad"]):
+        offset = float(offset_value)
+        target = origin + offset
+        print(f"[position {offset:+.2f} rad from origin]", flush=True)
+        lease_ms = int(float(plan["position_stage_duration_s"]) * 1000.0) + 400
+        device.set_arm_position(target, max_command=max_command, lease_ms=lease_ms)
+        samples = _capture(
+            device,
+            recorder,
+            float(plan["position_stage_duration_s"]),
+            phase=f"position-{index:02d}",
+            control="position",
+            target=target,
+            origin=origin,
+            offset=offset,
+        )
+        all_samples.extend(samples)
+        results.append(_position_summary(target, samples))
+    return origin, results
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if not 0.0 < args.speed_max_command <= 0.60:
@@ -100,105 +176,118 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--position-max-command must be in (0, 0.60]")
 
     plan = {
-        "speed_targets_rad_s": [4.0, 8.0, 12.0, 16.0, 0.0, -4.0, -8.0, -12.0, -16.0, 0.0, 12.0, -12.0, 0.0],
+        "speed_targets_rad_s": [
+            4.0,
+            8.0,
+            12.0,
+            0.0,
+            -4.0,
+            -8.0,
+            -12.0,
+            0.0,
+            8.0,
+            -8.0,
+            0.0,
+        ],
         "speed_stage_duration_s": 1.4,
-        "position_offsets_rad": [0.20, -0.20, 0.40, -0.40, 0.0],
+        "position_offsets_rad": [0.20, 0.0, -0.20, 0.0, 0.40, 0.0, -0.40, 0.0],
         "position_stage_duration_s": 1.8,
         "speed_max_command": args.speed_max_command,
         "position_max_command": args.position_max_command,
     }
 
-    result: dict[str, object] = {"test": "arm-servo-suite", "plan": plan}
+    result: dict[str, object] = {
+        "test": "arm-servo-suite",
+        "mode": args.mode,
+        "plan": plan,
+    }
 
     print(
         "Encoder-only arm-servo commissioning\n"
+        f"- mode: {args.mode}\n"
         "- pendulum ADC is not used by this test\n"
         "- clear the rotary-arm sweep envelope\n"
-        "- speed control and bounded position control run in the RP2350 1 kHz loop\n"
+        "- control runs in the RP2350 1 kHz loop\n"
         "- SAFE_OFF is requested on exit"
     )
 
     all_samples = []
+    speed_results: list[dict[str, object]] = []
+    position_results: list[dict[str, object]] = []
+    position_origin: float | None = None
+
     with Rp2350Device(hid_path=args.hid_path, cdc_port=args.cdc_port) as device:
         device.safe_off()
         device.start_telemetry()
-        with RunRecorder("arm-servo-suite") as recorder:
+        with RunRecorder(f"arm-servo-{args.mode}") as recorder:
             recorder.write_metadata(result)
             pre = device.status()
             result["pre_status"] = pre
             initial_illegal = int(pre.get("encoder_illegal_transitions", 0))
 
-            samples = _capture(device, recorder, 0.4, phase="prime", control="off", target=0.0)
+            samples = _capture(
+                device,
+                recorder,
+                0.4,
+                phase="prime",
+                control="off",
+                target=0.0,
+            )
             all_samples.extend(samples)
 
-            speed_results = []
-            for index, target in enumerate(plan["speed_targets_rad_s"]):
-                print(f"[speed {target:+.1f} rad/s]", flush=True)
-                lease_ms = int(plan["speed_stage_duration_s"] * 1000.0) + 400
-                device.set_arm_velocity(
-                    float(target),
-                    max_command=args.speed_max_command,
-                    lease_ms=lease_ms,
-                )
-                samples = _capture(
+            if args.mode in ("velocity", "all"):
+                speed_results = _run_velocity(
                     device,
                     recorder,
-                    float(plan["speed_stage_duration_s"]),
-                    phase=f"speed-{index:02d}",
-                    control="velocity",
-                    target=float(target),
+                    plan,
+                    args.speed_max_command,
+                    all_samples,
                 )
-                all_samples.extend(samples)
-                speed_results.append(_speed_summary(float(target), samples))
+                device.safe_off()
 
-            device.safe_off()
-            settle = _capture(device, recorder, 0.8, phase="position-settle", control="off", target=0.0)
-            all_samples.extend(settle)
-            if not settle:
-                raise RuntimeError("no telemetry before position sequence")
-            origin = settle[-1].phi
-
-            position_results = []
-            for index, offset in enumerate(plan["position_offsets_rad"]):
-                target = origin + float(offset)
-                print(f"[position {offset:+.2f} rad from origin]", flush=True)
-                lease_ms = int(plan["position_stage_duration_s"] * 1000.0) + 400
-                device.set_arm_position(
-                    target,
-                    max_command=args.position_max_command,
-                    lease_ms=lease_ms,
-                )
-                samples = _capture(
+            if args.mode in ("position", "all"):
+                position_origin, position_results = _run_position(
                     device,
                     recorder,
-                    float(plan["position_stage_duration_s"]),
-                    phase=f"position-{index:02d}",
-                    control="position",
-                    target=target,
-                    origin=origin,
-                    offset=float(offset),
+                    plan,
+                    args.position_max_command,
+                    all_samples,
                 )
-                all_samples.extend(samples)
-                position_results.append(_position_summary(target, samples))
 
             device.safe_off()
-            samples = _capture(device, recorder, 0.5, phase="post-safe-off", control="off", target=0.0)
+            samples = _capture(
+                device,
+                recorder,
+                0.5,
+                phase="post-safe-off",
+                control="off",
+                target=0.0,
+            )
             all_samples.extend(samples)
             post = device.status()
+
             result["post_status"] = post
             result["speed"] = speed_results
             result["position"] = position_results
-            result["position_origin_rad"] = origin
+            result["position_origin_rad"] = position_origin
             result["encoder_illegal_transition_delta"] = (
                 int(post.get("encoder_illegal_transitions", 0)) - initial_illegal
             )
             result["runtime_timing"] = {
                 "samples": len(all_samples),
-                "missed_opportunities_max": max((s.missed_opportunities for s in all_samples), default=0),
-                "deadline_overruns_max": max((s.deadline_overruns for s in all_samples), default=0),
-                "execution_time_us_max": max((s.execution_time_us for s in all_samples), default=0),
+                "missed_opportunities_max": max(
+                    (s.missed_opportunities for s in all_samples), default=0
+                ),
+                "deadline_overruns_max": max(
+                    (s.deadline_overruns for s in all_samples), default=0
+                ),
+                "execution_time_us_max": max(
+                    (s.execution_time_us for s in all_samples), default=0
+                ),
                 "execution_time_us_mean": (
-                    statistics.fmean(s.execution_time_us for s in all_samples) if all_samples else None
+                    statistics.fmean(s.execution_time_us for s in all_samples)
+                    if all_samples
+                    else None
                 ),
             }
             result["artifact_dir"] = str(recorder.directory)
